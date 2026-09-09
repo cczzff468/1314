@@ -839,3 +839,33 @@ Stage Summary:
 - 语音识别用不了的根因是开关默认关闭 + 预览面板 iframe 限制；已改默认开启并对
   iframe/网络/麦克风错误给出明确引导文案
 - 修改文件：src/cove/store.ts（1 处）、src/cove/pages/Chat.tsx（2 处）
+
+---
+Task ID: 21
+Agent: main (Z.ai Code)
+Task: 优化 iframe 内语音功能提示为「一键新标签页打开」（用户遇到提示：
+「页面正嵌在框架里运行，请在浏览器中用新标签页直接打开本页再测试」）
+
+Work Log:
+- 定位：该提示来自 VoiceApiPage.testStt 的 iframe 检测（设置-语音配置-测试连接）；
+  用户在预览面板（iframe）内操作，麦克风权限不可用，旧提示只给文字引导，
+  用户需手动找 Open in New Tab 按钮
+- 优化方案：iframe 检测命中时直接 window.open(location.href, '_blank')
+  自动弹新标签页（点击链路内不会被弹窗拦截；返回 null 时回退文字引导）
+- 修改 src/cove/pages/VoiceApiPage.tsx testStt（1 处）：iframe 分支改为
+  window.open + 「已在新标签页打开本页，请在新打开的页面里继续测试语音识别」
+- 修改 src/cove/pages/Chat.tsx startVoice（1 处）：同样升级为 window.open +
+  「已在新标签页打开，语音输入请在新打开的页面中使用」
+- 验证（agent-browser）：
+  - 语音配置页：注入嵌套 iframe → 点「测试连接」→ 真实弹出 2 个新标签页
+    （tab t3/t4，URL=location.href）✓；stub window.open 同步验证：openedUrl
+    正确、toast 文案「已在新标签页打开本页…」✓
+  - 聊天页：iframe 内进林小夏聊天 → 点语音输入 → stub 验证 openedUrl=
+    /?as=app、toast「已在新标签页打开，语音输入请在新打开的页面中使用」✓
+  - 页面恢复正常、多余 tab 已清理 ✓
+- lint 0 error（3 条既有 warning）、dev.log 全 200
+
+Stage Summary:
+- 预览面板内点击语音测试/语音输入时自动在新标签页打开应用（window.open），
+  配 toast 引导；被弹窗拦截时回退文字提示
+- 修改文件：src/cove/pages/VoiceApiPage.tsx（1 处）、src/cove/pages/Chat.tsx（1 处）

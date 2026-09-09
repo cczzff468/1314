@@ -292,7 +292,12 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
       return
     }
     if (window.self !== window.top) {
-      showHint('页面正嵌在框架里运行，请在浏览器中用新标签页直接打开本页再测试')
+      const w = window.open(location.href, '_blank')
+      showHint(
+        w
+          ? '已在新标签页打开本页，请在新打开的页面里继续测试语音识别'
+          : '预览框架内无法测试，请点预览面板上方 Open in New Tab 在新标签页打开'
+      )
       return
     }
     setSttTesting(true)

@@ -519,7 +519,12 @@ export default function Chat({
       return
     }
     if (window.self !== window.top) {
-      showHint('预览框架内无法使用麦克风，请点预览面板上方 Open in New Tab 在新标签页打开后使用')
+      const w = window.open(location.href, '_blank')
+      showHint(
+        w
+          ? '已在新标签页打开，语音输入请在新打开的页面中使用'
+          : '预览框架内无法使用麦克风，请点预览面板上方 Open in New Tab 打开新标签页'
+      )
       return
     }
     if (listening) {
