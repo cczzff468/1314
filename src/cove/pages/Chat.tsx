@@ -518,6 +518,10 @@ export default function Chat({
       showHint('语音输入未开启，请在 设置-语音配置 中打开')
       return
     }
+    if (window.self !== window.top) {
+      showHint('预览框架内无法使用麦克风，请点预览面板上方 Open in New Tab 在新标签页打开后使用')
+      return
+    }
     if (listening) {
       stopVoice()
       return
@@ -544,7 +548,11 @@ export default function Chat({
             ? '麦克风权限被拒绝，请在浏览器地址栏允许麦克风'
             : e.error === 'no-speech'
               ? '没有听到说话'
-              : '识别出错，请再试一次'
+              : e.error === 'network'
+                ? '识别服务网络异常，当前网络可能无法连通语音服务器'
+                : e.error === 'audio-capture'
+                  ? '麦克风不可用或被占用，请检查后重试'
+                  : '识别出错，请再试一次'
         showHint(msg)
       }
       r.onend = () => {

@@ -807,3 +807,35 @@ Stage Summary:
 - 转账卡片由「橙体+白底灰字微信转账条」两段式改为单段统一橙色 #FA9D3B
   （已收款/已退还整卡褪色 #FDE1C4），底部小字改为「转账」白字 85% 透明度
 - 修改文件：src/cove/pages/Chat.tsx（1 处）、src/cove/index.css（3 处规则）
+
+---
+Task ID: 20
+Agent: main (Z.ai Code)
+Task: 排查并修复「识别语音用不了」
+
+Work Log:
+- 诊断（agent-browser 实测）：浏览器 SpeechRecognition/mediaDevices/secureContext 均可用，
+  点击语音输入提示「语音输入未开启，请在 设置-语音配置 中打开」→ 根因是
+  store.ts 中 sttEnabled 默认 false（sttEnabled === true），开关藏在
+  设置-语音配置 二级页面，新用户难以发现
+- 次因排查：预览面板为 iframe 嵌入，Chrome 语音识别在 iframe 内无法访问麦克风；
+  VoiceApiPage.testStt 已有 iframe 检测但 Chat.tsx 没有
+- 修复 src/cove/store.ts（1 处）：sttEnabled 默认值 true（voice.sttEnabled !== false，
+  仅显式关闭时保持关闭，尊重已关闭用户的选择）
+- 修复 src/cove/pages/Chat.tsx startVoice（2 处）：
+  - 新增 iframe 检测：预览框架内提示「请点预览面板上方 Open in New Tab 在新标签页
+    打开后使用」
+  - onerror 错误分类细化：network→识别服务网络异常、audio-capture→麦克风不可用
+    或被占用（原统一显示「识别出错请再试」）
+- 验证（agent-browser）：
+  - 顶层窗口点击语音输入：不再提示未开启，SpeechRecognition 实际启动，headless
+    无麦克风正确触发「麦克风权限被拒绝」提示（错误链路正常）✓
+  - 注入 iframe 模拟预览面板：点击语音输入 → 正确提示「预览框架内无法使用
+    麦克风，请点 Open in New Tab…」✓
+  - 页面恢复正常渲染、无 console error ✓
+- lint 0 error（3 条既有 warning）、dev.log 全 200
+
+Stage Summary:
+- 语音识别用不了的根因是开关默认关闭 + 预览面板 iframe 限制；已改默认开启并对
+  iframe/网络/麦克风错误给出明确引导文案
+- 修改文件：src/cove/store.ts（1 处）、src/cove/pages/Chat.tsx（2 处）
