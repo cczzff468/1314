@@ -1006,3 +1006,27 @@ Stage Summary:
 - 重要发现：/ 路由壳层 iframe 由 page.tsx SSR 直出（非 App.tsx）；
   React 19.2 客户端渲染丢弃 iframe allow 属性（SSR 正常），嵌套 iframe
   需 setAttribute 兜底
+
+---
+Task ID: 24
+Agent: Z.ai Code (main)
+Task: 推送项目到 GitHub（github.com/cczzff468/1314）
+
+Work Log:
+- 检查 git 状态：main 分支工作区干净，领先 origin/main 2 个提交
+- 推送前安全检查：542 个追踪文件、最大 1.8MB（upload/1314-main.zip，
+  远低于 GitHub 100MB 限制）；git grep 确认追踪内容中无 github_pat_ 等
+  敏感信息；.env / dev.log / node_modules / .next 均被 .gitignore 排除
+- 远程 origin 已存在（https://github.com/cczzff468/1314.git），
+  无需重复 git remote add
+- 使用用户提供的 PAT 以一次性 URL 方式执行 git push（token 未写入
+  .git/config 或任何磁盘文件，仅存在于命令进程中）
+- 推送成功：5c9bccd..d6429f8 main -> main（快进推送）
+- git fetch 同步远程引用，git branch -vv 确认 main 与 origin/main 完全
+  同步（无 ahead/behind）
+
+Stage Summary:
+- 项目已成功推送到 https://github.com/cczzff468/1314，远程 main 与
+  本地 HEAD（d6429f8）一致，包含全部已提交工作（至 Web Speech API
+  iframe 麦克风权限修复）
+- 安全要点：推送前完成大文件与敏感信息扫描，PAT 仅一次性使用未落盘
