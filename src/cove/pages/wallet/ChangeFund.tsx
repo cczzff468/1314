@@ -12,6 +12,28 @@ const YIELD_BARS = [0.52, 0.55, 0.53, 0.56, 0.58, 0.55, 0.6]
 /* 收益试算：转入 ¥10,000 的预计每日收益 */
 const CALC_DAILY = Math.round((10000 * 0.01986) / 365 * 100) / 100
 
+/* 折线面积图（仿微信）：近7日数据 → 平滑曲线 + 渐变填充 + 末点标记 + 日期轴 */
+const CHART_W = 300
+const CHART_H = 96
+const CHART_BASE = 90
+const chartPts = YIELD_BARS.map((v, i) => ({
+  x: 8 + (i / (YIELD_BARS.length - 1)) * (CHART_W - 16),
+  y: 76 - (v - 0.5) * 250,
+}))
+const chartLine = (() => {
+  let d = `M${chartPts[0].x} ${chartPts[0].y}`
+  for (let i = 0; i < chartPts.length - 1; i++) {
+    const c = (chartPts[i + 1].x - chartPts[i].x) / 3
+    d += ` C${chartPts[i].x + c} ${chartPts[i].y} ${chartPts[i + 1].x - c} ${chartPts[i + 1].y} ${chartPts[i + 1].x} ${chartPts[i + 1].y}`
+  }
+  return d
+})()
+const chartArea = `${chartLine} L${chartPts[chartPts.length - 1].x} ${CHART_BASE} L${chartPts[0].x} ${CHART_BASE} Z`
+const chartDates = YIELD_BARS.map((_, i) => {
+  const dt = new Date(Date.now() - (YIELD_BARS.length - 1 - i) * 86400000)
+  return `${dt.getMonth() + 1}/${dt.getDate()}`
+})
+
 export default function ChangeFund({ onBack, onOpenBills }: { onBack: () => void; onOpenBills: () => void }) {
   const [mode, setMode] = useState<null | '转入' | '转出'>(null)
   const [val, setVal] = useState('')
@@ -72,16 +94,30 @@ export default function ChangeFund({ onBack, onOpenBills }: { onBack: () => void
             <div className="fund-open-rate">
               <span className="fund-open-rate-label">七日年化收益率</span>
               <span className="fund-open-rate-num">{RATE}</span>
-              <span className="fund-pill">易方达易理财货币A</span>
+              <span className="fund-open-pills">
+                <span className="fund-pill">易方达易理财货币A</span>
+                <span className="fund-pill">低风险</span>
+              </span>
             </div>
             <div className="fund-open-chart" aria-hidden="true">
-              {YIELD_BARS.map((v, i) => (
-                <span key={i} className={`fund-open-bar${i === YIELD_BARS.length - 1 ? ' hot' : ''}`} style={{ height: `${28 + v * 90}px` }} />
-              ))}
+              <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="fund-open-area" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ffb400" stopOpacity="0.26" />
+                    <stop offset="100%" stopColor="#ffb400" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                <path d={chartArea} fill="url(#fund-open-area)" />
+                <path d={chartLine} fill="none" stroke="#ff9d00" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                <circle cx={chartPts[chartPts.length - 1].x} cy={chartPts[chartPts.length - 1].y} r="3.6" fill="#ff9d00" stroke="#fff" strokeWidth="1.6" />
+              </svg>
             </div>
-            <div className="fund-open-chart-cap">
-              <span className="fund-open-chart-dot" />
-              近7日收益率走势 · 低风险
+            <div className="fund-open-dates" aria-hidden="true">
+              {chartDates.map((d, i) => (
+                <span key={d} className={i === chartDates.length - 1 ? 'cur' : ''}>
+                  {d}
+                </span>
+              ))}
             </div>
             <div className="fund-open-slogan">零钱转入零钱通，能赚又能花</div>
             <div className="fund-open-calc">

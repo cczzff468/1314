@@ -551,3 +551,49 @@ Stage Summary:
   开通页与主页用 .fund-open-page 类区分渐变基调
 - 修改文件：src/cove/types.ts、src/cove/pages/wallet/WalletHome.tsx、ChangeFund.tsx、
   BankCards.tsx、src/cove/index.css（Change.tsx 结构未动，仅 CSS）
+
+---
+Task ID: 13
+Agent: Z.ai Code (主控)
+Task: 钱包第五轮修正：①删除零钱页「我的零钱」后误加的灰卡（上轮误解）②钱包页零钱块改
+深灰底白字 ③开通零钱通界面换微信式折线面积图 ④修复「开通后又要再开通」（fundOpened
+持久化丢失）
+
+Work Log:
+- index.css：.change-hero 回滚上轮改动（去 bg/margin/圆角，恢复 padding 26px 0 10px 透明），
+  .change-title 恢复 #1a1a1a —— 零钱页金额区直接放在页面浅灰底上（无灰卡）
+- index.css：.wallet-balance-block 灰底 #d1d1d6 → #3a3a3c 深灰，label → rgba(255,255,255,.72)、
+  amount → #fff（深灰底白字，充值/提保持白按钮，对比强烈）
+- ChangeFund.tsx + index.css 开通页再美化（仿微信）：
+  - 柱状图换 SVG 平滑折线面积图：chartPts/chartLine（三次贝塞尔平滑）/chartArea 程序化生成，
+    橙色 2.2px 折线 + 线性渐变面积填充（#ffb400 .26→0）+ 末端白描边圆点
+  - 新增 7 格日期轴（近7日实际日期 M/D，末位橙色加粗，flex space-between + 底部分隔线）
+  - 基金 pill 旁新增「低风险」pill（.fund-open-pills）；删除原柱图/图例说明 CSS
+- store.ts 持久化加固（「开通后又要再开通」根因修复）：
+  - 根因：store 模块在 Fast Refresh/HMR 重新求值时 memory Map 被清空且不重新 hydrate →
+    loadWallet 回落默认值（fundOpened=false 弹开通页），且此后任何钱包写入会把默认数据
+    回写 IndexedDB（连银行卡一起抹掉）
+  - 修复①：memory Map 与 dbPromise 挂 globalThis（window.__coveStoreMemory/__coveStoreDb
+    单例，模块重载复用，HMR 不丢状态）
+  - 修复②：钱包写入同步镜像 localStorage 'im.wallet.mirror2'（新 key，避开 hydrate 的
+    legacy 'im.wallet' 兜底读旧数据），loadWallet 以镜像合并兜底（镜像每次保存同步刷新、
+    永不旧于 IndexedDB）
+- 端到端验证（agent-browser 390x844 + 计算样式 + VLM + HMR 实测）：
+  - 零钱页：hero 背景透明 rgba(0,0,0,0)、标题 #1a1a1a（VLM 确认无灰卡）✓
+  - 钱包页：零钱块 rgb(58,58,60)=#3a3a3c、金额白色（VLM 确认深灰块对比强烈、布局无问题）✓
+  - 开通页：SVG 折线 #ff9d00 + 面积渐变 + 末点圆点 + 日期 9/3…9/9（末位橙）+ 双 pill
+    （易方达…/低风险）+ 0 根旧柱 ✓；VLM 确认布局协调无重叠溢出 ✓
+  - 持久化（关键路径）：重置 fundOpened → 开通（toast「零钱通已开通」+ 主页 + 镜像
+    fundOpened:true）→ **reload 后直接进零钱通主页（不再弹开通页）** ✓；会话内返回钱包
+    再进零钱通 → 主页 ✓
+  - HMR 实测：开通后 touch ChangeFund.tsx 触发 Fast Refresh（store 模块重载）→
+    fund 主页保持、开通页未复现、__coveStoreMemory 存活、镜像 intact ✓
+  - 控制台零错误、dev.log 全 200、lint 0 error（3条既有 warning）
+
+Stage Summary:
+- 三项视觉修正落地：零钱页灰卡删除（恢复微信式透明底）、钱包零钱块深灰底白字、
+  零钱通开通页换平滑折线面积图+日期轴（更接近微信观感）
+- 关键 bug 修复：fundOpened 持久化 —— globalThis 单例防 HMR 状态清空（同时保护银行卡
+  等全部钱包数据不被默认值覆盖回写）+ localStorage 同步镜像双保险；重载/HMR/会话内
+  三种路径均不再重复弹开通页
+- 修改文件：src/cove/index.css、src/cove/pages/wallet/ChangeFund.tsx、src/cove/store.ts

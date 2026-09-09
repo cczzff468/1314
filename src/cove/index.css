@@ -4687,26 +4687,26 @@ button:disabled {
   padding: 12px 14px 32px;
   background: #ededed;
 }
-/* 零钱块：灰底（加深）、金额居中、下方充值/提现 */
+/* 零钱块：深灰底、白字居中、下方充值/提现 */
 .wallet-balance-block {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
   width: 100%;
-  background: #d1d1d6;
+  background: #3a3a3c;
   border-radius: 12px;
   padding: 24px 16px 20px;
   margin-bottom: 12px;
 }
 .wallet-balance-label {
   font-size: 13px;
-  color: #55555a;
+  color: rgba(255, 255, 255, 0.72);
 }
 .wallet-balance-amount {
   font-size: 30px;
   font-weight: 700;
-  color: #1a1a1a;
+  color: #fff;
   font-variant-numeric: tabular-nums;
 }
 .wallet-balance-actions {
@@ -4832,10 +4832,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 22px 16px 16px;
-  margin: 10px 14px 4px;
-  background: #d1d1d6;
-  border-radius: 14px;
+  padding: 26px 0 10px;
 }
 .change-coin {
   width: 46px;
@@ -4853,7 +4850,7 @@ button:disabled {
 .change-title {
   margin-top: 10px;
   font-size: 14px;
-  color: #55555a;
+  color: #1a1a1a;
 }
 .change-amount {
   margin-top: 4px;
@@ -5101,42 +5098,36 @@ button:disabled {
   font-variant-numeric: tabular-nums;
   letter-spacing: .5px;
 }
+/* 折线面积图（仿微信） */
 .fund-open-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
+  border-bottom: none;
+  padding: 0;
+}
+.fund-open-chart svg {
+  display: block;
+  width: 100%;
   height: 96px;
-  padding: 4px 2px 0;
-  border-bottom: 1px solid #ececef;
 }
-.fund-open-bar {
-  flex: 1;
-  border-radius: 5px 5px 2px 2px;
-  background: linear-gradient(180deg, #ffd98a, #ffbb55);
-  transition: height .3s ease;
-}
-.fund-open-bar.hot,
-.fund-open-bar:last-child {
-  background: linear-gradient(180deg, #ffc23d, #ff9d00);
-  box-shadow: 0 -2px 8px rgba(255, 157, 0, 0.35);
-}
-.fund-open-chart-cap {
+.fund-open-dates {
   display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 10px;
-  font-size: 11px;
-  color: #a0a0a6;
+  justify-content: space-between;
+  margin-top: 3px;
+  padding: 0 4px;
+  font-size: 10px;
+  color: #b8b8bd;
+  border-bottom: 1px solid #ececef;
+  padding-bottom: 12px;
 }
-.fund-open-chart-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
-  background: linear-gradient(180deg, #ffc23d, #ff9d00);
-  flex-shrink: 0;
+.fund-open-dates .cur {
+  color: #ff9d00;
+  font-weight: 600;
+}
+.fund-open-pills {
+  display: flex;
+  gap: 6px;
 }
 .fund-open-slogan {
-  margin-top: 14px;
+  margin-top: 16px;
   font-size: 15px;
   font-weight: 600;
   color: #1a1a1a;

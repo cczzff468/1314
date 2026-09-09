@@ -19,13 +19,21 @@ const BILLS_KEY = 'im.bills'
 const ALL_KEYS = [FRIENDS_KEY, MSGS_KEY, PROFILE_KEY, MOMENTS_KEY, COVER_KEY, UI_KEY, API_KEY_STORE, PERSONAS_KEY, ACTIVE_PERSONA_KEY, MEMORY_KEY, CHATBG_KEY, STICKERS_KEY, LOCATIONS_KEY, WALLET_KEY, BILLS_KEY]
 const DB_NAME = 'ios-im'
 const STORE_NAME = 'kv'
+/* 钱包同步镜像（localStorage，同步可靠；IndexedDB 写失败/模块重置时兑底） */
+const WALLET_MIRROR_KEY = 'im.wallet.mirror2'
 
-const memory = new Map<string, unknown>()
-let dbPromise: Promise<IDBDatabase> | null = null
+/* 模块重载（HMR/热更新）时保留内存单例：否则 store 重新求值会把 memory 清空，
+   后续任何写入会把默认数据回写 IndexedDB，丢失 fundOpened/银行卡等已保存状态 */
+type CoveStoreGlobal = typeof globalThis & {
+  __coveStoreMemory?: Map<string, unknown>
+  __coveStoreDb?: Promise<IDBDatabase>
+}
+const gStore = globalThis as CoveStoreGlobal
+const memory: Map<string, unknown> = gStore.__coveStoreMemory ?? (gStore.__coveStoreMemory = new Map<string, unknown>())
 
 function openDB(): Promise<IDBDatabase> {
-  if (!dbPromise) {
-    dbPromise = new Promise((resolve, reject) => {
+  if (!gStore.__coveStoreDb) {
+    gStore.__coveStoreDb = new Promise((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, 1)
       req.onupgradeneeded = () => {
         if (!req.result.objectStoreNames.contains(STORE_NAME)) {
@@ -36,7 +44,7 @@ function openDB(): Promise<IDBDatabase> {
       req.onerror = () => reject(req.error)
     })
   }
-  return dbPromise
+  return gStore.__coveStoreDb
 }
 
 export async function hydrate(): Promise<void> {
@@ -105,6 +113,14 @@ function read<T>(key: string, fallback: T): T {
 
 function write(key: string, value: unknown) {
   memory.set(key, value)
+  if (key === WALLET_KEY) {
+    /* 钱包同步镜像（含 fundOpened/银行卡），防 IndexedDB 异步写丢失 */
+    try {
+      localStorage.setItem(WALLET_MIRROR_KEY, JSON.stringify(value))
+    } catch {
+      /* localStorage 不可用时仅存 IndexedDB */
+    }
+  }
   openDB()
     .then((db) => {
       const tx = db.transaction(STORE_NAME, 'readwrite')
@@ -378,7 +394,14 @@ const DEFAULT_WALLET: WalletState = {
 }
 
 export function loadWallet(): WalletState {
-  const raw = read<Partial<WalletState>>(WALLET_KEY, {})
+  let raw = read<Partial<WalletState>>(WALLET_KEY, {})
+  /* 同步镜像优先（每次保存都会同步刷新，永远不旧于 IndexedDB） */
+  try {
+    const mirror = localStorage.getItem(WALLET_MIRROR_KEY)
+    if (mirror) raw = { ...raw, ...(JSON.parse(mirror) as Partial<WalletState>) }
+  } catch {
+    /* ignore malformed mirror */
+  }
   const bankCards = (Array.isArray(raw.bankCards) ? raw.bankCards : []).map((c) => ({ ...c, available: typeof c.available === 'number' ? c.available : 0 }))
   /* 零钱通开通状态：仅认显式标记（开通页点击「开通零钱通」写入），未开通时进入零钱通先展示开通界面 */
   const fundOpened = raw.fundOpened ?? false
