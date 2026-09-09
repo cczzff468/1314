@@ -24,10 +24,25 @@ const detectBankIdx = (no: string) => {
 
 const fmtNo = (digits: string) => digits.replace(/(\d{4})(?=\d)/g, '$1 ')
 
-/* 实体卡片视觉：银行渐变底 + 行徽 + 卡号 + 持卡人 */
+/* 可选卡面颜色（-1/缺省 = 经典，跟随银行主色） */
+const CARD_COLORS: { name: string; a: string; b: string }[] = [
+  { name: '曜石黑', a: '#23232b', b: '#4d4d59' },
+  { name: '深海蓝', a: '#123a75', b: '#316bb5' },
+  { name: '翡翠绿', a: '#0c5f46', b: '#1e9b78' },
+  { name: '酒红', a: '#6e1f2c', b: '#b24455' },
+  { name: '香槟金', a: '#7c6428', b: '#c2a25a' },
+  { name: '暮紫', a: '#3f2a68', b: '#7650a8' },
+]
+
+/* 实体卡片视觉：银行/自选色渐变底 + 行徽 + 芯片 + 非接触 + 卡号 + 持卡人 + 银联 */
 function CardVisual({ card, bank, big = false, onClick }: { card: BankCard; bank: { name: string; bg: string; abbr: string }; big?: boolean; onClick?: () => void }) {
+  const cIdx = typeof card.colorIdx === 'number' ? card.colorIdx : -1
+  const color = CARD_COLORS[cIdx]
+  const bg = color
+    ? `linear-gradient(125deg, ${color.a} 0%, ${color.b} 58%, rgba(255,255,255,.16) 135%)`
+    : `linear-gradient(120deg, ${bank.bg} 0%, ${bank.bg} 55%, rgba(255,255,255,.18) 130%)`
   return (
-    <button type="button" className={`bankcard-vis${big ? ' big' : ''}`} style={{ background: `linear-gradient(120deg, ${bank.bg} 0%, ${bank.bg} 55%, rgba(255,255,255,.18) 130%)` }} onClick={onClick} aria-label={`查看${card.bankName}银行卡详情`}>
+    <button type="button" className={`bankcard-vis${big ? ' big' : ''}`} style={{ background: bg }} onClick={onClick} aria-label={`查看${card.bankName}银行卡详情`}>
       <span className="bankcard-vis-top">
         <span className="bankcard-vis-bank">
           <span className="bankcard-vis-logo">{bank.abbr}</span>
@@ -40,11 +55,16 @@ function CardVisual({ card, bank, big = false, onClick }: { card: BankCard; bank
           <rect x="1" y="1" width="22" height="15" rx="2.4" stroke="rgba(255,255,255,.85)" strokeWidth="1.4" />
           <path d="M1 6.2h6.5M9.5 1v15M16.5 1v15M9.5 8.5h7M9.5 12h7M16.5 8.5c3 0 5 1.8 6.5 2.8M16.5 12c2.6 0 4.4 1.4 5.8 2.6" stroke="rgba(255,255,255,.7)" strokeWidth="1.2" />
         </svg>
+        <svg className="bankcard-vis-nfc" width="15" height="15" viewBox="0 0 24 24" fill="none">
+          <path d="M6 8.5a8 8 0 0 1 0 7" stroke="rgba(255,255,255,.85)" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M10 6a11.5 11.5 0 0 1 0 12" stroke="rgba(255,255,255,.66)" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M14 3.5a15.5 15.5 0 0 1 0 17" stroke="rgba(255,255,255,.48)" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
       </span>
       <span className="bankcard-vis-no">{fmtNo(card.cardNo ?? '**** **** **** ' + card.cardTail)}</span>
       <span className="bankcard-vis-bottom">
         <span className="bankcard-vis-holder">持卡人 {card.holder || '本人'}</span>
-        {big && <span className="bankcard-vis-un">UNIONPAY 银联</span>}
+        <span className="bankcard-vis-un">UNIONPAY 银联</span>
       </span>
     </button>
   )
@@ -58,6 +78,7 @@ export default function BankCards({ onBack }: { onBack: () => void }) {
   const [cardType, setCardType] = useState<'储蓄卡' | '信用卡'>('储蓄卡')
   const [bankIdx, setBankIdx] = useState(0)
   const [cardNo, setCardNo] = useState('')
+  const [cardColor, setCardColor] = useState(-1)
   const [amount, setAmount] = useState('10000')
   const [holder, setHolder] = useState('')
   const [phone, setPhone] = useState('')
@@ -73,6 +94,7 @@ export default function BankCards({ onBack }: { onBack: () => void }) {
     setCardType('储蓄卡')
     setBankIdx(0)
     setCardNo('')
+    setCardColor(-1)
     setAmount('10000')
     setHolder(me.name)
     setPhone('138' + String(Math.floor(Math.random() * 90000000 + 10000000)))
@@ -118,6 +140,7 @@ export default function BankCards({ onBack }: { onBack: () => void }) {
       bankName: bank.name,
       cardTail: digits.slice(-4),
       cardNo: digits,
+      colorIdx: cardColor,
       holder: holder.trim(),
       phone,
       cardType,
@@ -215,6 +238,23 @@ export default function BankCards({ onBack }: { onBack: () => void }) {
           }
         />
         <div className="page-body bank-form-page">
+          <div className="bank-form-label">卡面预览</div>
+          <CardVisual
+            card={{
+              id: 'preview',
+              bankName: BANKS[bankIdx].name,
+              cardTail: '0000',
+              cardNo: cardNo || '•••• •••• •••• ••••',
+              colorIdx: cardColor,
+              holder: holder.trim(),
+              phone: '',
+              cardType,
+              available: 0,
+              createdAt: 0,
+            }}
+            bank={BANKS[bankIdx]}
+          />
+
           <div className="bank-form-label">卡类型</div>
           <div className="bank-type-seg">
             {(['储蓄卡', '信用卡'] as const).map((t) => (
@@ -236,6 +276,41 @@ export default function BankCards({ onBack }: { onBack: () => void }) {
                   {b.abbr}
                 </span>
                 {b.name.replace('银行', '')}
+              </button>
+            ))}
+          </div>
+
+          <div className="bank-form-label">卡片颜色</div>
+          <div className="bank-color-row">
+            <button
+              type="button"
+              className={`bank-color-swatch ${cardColor === -1 ? 'on' : ''}`}
+              onClick={() => { setCardColor(-1); setErr('') }}
+            >
+              <span className="bank-color-fill" style={{ background: `linear-gradient(125deg, ${BANKS[bankIdx].bg} 0%, ${BANKS[bankIdx].bg} 60%, rgba(255,255,255,.2) 135%)` }}>
+                {cardColor === -1 && (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                    <path d="m5 12.5 4.5 4.5L19 7.5" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </span>
+              <span className="bank-color-name">经典</span>
+            </button>
+            {CARD_COLORS.map((c, i) => (
+              <button
+                key={c.name}
+                type="button"
+                className={`bank-color-swatch ${cardColor === i ? 'on' : ''}`}
+                onClick={() => { setCardColor(i); setErr('') }}
+              >
+                <span className="bank-color-fill" style={{ background: `linear-gradient(135deg, ${c.a} 0%, ${c.b} 100%)` }}>
+                  {cardColor === i && (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                      <path d="m5 12.5 4.5 4.5L19 7.5" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </span>
+                <span className="bank-color-name">{c.name}</span>
               </button>
             ))}
           </div>

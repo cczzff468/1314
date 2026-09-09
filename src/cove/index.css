@@ -4687,21 +4687,21 @@ button:disabled {
   padding: 12px 14px 32px;
   background: #ededed;
 }
-/* 零钱块：灰底、金额居中、下方充值/提现 */
+/* 零钱块：灰底（加深）、金额居中、下方充值/提现 */
 .wallet-balance-block {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
   width: 100%;
-  background: #e3e3e6;
+  background: #d1d1d6;
   border-radius: 12px;
   padding: 24px 16px 20px;
   margin-bottom: 12px;
 }
 .wallet-balance-label {
   font-size: 13px;
-  color: #6f6f74;
+  color: #55555a;
 }
 .wallet-balance-amount {
   font-size: 30px;
@@ -4759,6 +4759,7 @@ button:disabled {
   padding: 16px 0 12px;
   cursor: pointer;
 }
+/* 付款码/收款码/扫一扫：线条样式（透明底 + 内描边 + currentColor） */
 .wallet-pay-icon {
   width: 44px;
   height: 44px;
@@ -4766,6 +4767,9 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
+  background: transparent;
+  color: #3a3a3c;
+  box-shadow: inset 0 0 0 1.4px #d9d9de;
 }
 .wallet-pay-name {
   font-size: 13px;
@@ -4828,7 +4832,10 @@ button:disabled {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 26px 0 10px;
+  padding: 22px 16px 16px;
+  margin: 10px 14px 4px;
+  background: #d1d1d6;
+  border-radius: 14px;
 }
 .change-coin {
   width: 46px;
@@ -4846,7 +4853,7 @@ button:disabled {
 .change-title {
   margin-top: 10px;
   font-size: 14px;
-  color: #1a1a1a;
+  color: #55555a;
 }
 .change-amount {
   margin-top: 4px;
@@ -5053,6 +5060,25 @@ button:disabled {
 }
 
 /* ---------- 零钱通开通界面 ---------- */
+/* 开通页专属：更柔和的暖色渐变（仿微信） */
+.fund-open-page {
+  background: linear-gradient(180deg, #ffbd59 0%, #ffd98a 26%, #f4f4f5 52%);
+}
+.fund-open-page .fund-brand {
+  padding: 2px 2px 16px;
+}
+.fund-open-page .fund-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+.fund-open-page .fund-title {
+  font-size: 21px;
+}
+.fund-open-page .fund-card {
+  box-shadow: 0 10px 28px rgba(214, 138, 0, 0.16);
+}
 .fund-open-card {
   display: flex;
   flex-direction: column;
@@ -5062,41 +5088,83 @@ button:disabled {
   flex-direction: column;
   align-items: flex-start;
   gap: 3px;
-  padding-bottom: 14px;
+  padding-bottom: 16px;
 }
 .fund-open-rate-label {
   font-size: 13px;
   color: #8a8a8e;
 }
 .fund-open-rate-num {
-  font-size: 34px;
+  font-size: 38px;
   font-weight: 700;
   color: #1a1a1a;
   font-variant-numeric: tabular-nums;
+  letter-spacing: .5px;
 }
 .fund-open-chart {
   display: flex;
   align-items: flex-end;
-  gap: 9px;
-  height: 92px;
+  gap: 10px;
+  height: 96px;
   padding: 4px 2px 0;
-  border-bottom: 1px solid #f0f0f2;
+  border-bottom: 1px solid #ececef;
 }
 .fund-open-bar {
   flex: 1;
-  border-radius: 4px 4px 0 0;
-  background: linear-gradient(180deg, #ffc23d, #ff9d00);
-  opacity: .9;
+  border-radius: 5px 5px 2px 2px;
+  background: linear-gradient(180deg, #ffd98a, #ffbb55);
+  transition: height .3s ease;
 }
+.fund-open-bar.hot,
 .fund-open-bar:last-child {
-  opacity: 1;
+  background: linear-gradient(180deg, #ffc23d, #ff9d00);
+  box-shadow: 0 -2px 8px rgba(255, 157, 0, 0.35);
+}
+.fund-open-chart-cap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: #a0a0a6;
+}
+.fund-open-chart-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #ffc23d, #ff9d00);
+  flex-shrink: 0;
 }
 .fund-open-slogan {
   margin-top: 14px;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: #1a1a1a;
   text-align: center;
+  letter-spacing: .5px;
+}
+.fund-open-calc {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 14px;
+  background: #f7f7f9;
+  border-radius: 10px;
+  padding: 11px 13px;
+  font-size: 12px;
+  color: #8a8a8e;
+}
+.fund-open-calc-main {
+  flex: 1;
+  text-align: right;
+  color: #7a7a80;
+}
+.fund-open-calc-main em {
+  font-style: normal;
+  color: #ff9d00;
+  font-weight: 700;
+  font-size: 14.5px;
+  font-variant-numeric: tabular-nums;
 }
 .fund-open-points {
   background: #fff;
@@ -5167,7 +5235,28 @@ button:disabled {
   cursor: pointer;
 }
 .fund-open-btn {
+  margin-top: 18px;
+  box-shadow: 0 8px 20px rgba(255, 157, 0, 0.35);
+}
+.fund-open-btn:active {
+  transform: scale(.98);
+}
+.fund-open-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
   margin-top: 16px;
+  font-size: 12.5px;
+  color: #8a8a8e;
+}
+.fund-open-links i {
+  width: 1px;
+  height: 11px;
+  background: #d5d5da;
+}
+.fund-open-links span {
+  cursor: pointer;
 }
 .fund-open-note {
   margin-top: 12px;
@@ -7408,16 +7497,26 @@ button:disabled {
   width: 100%;
   aspect-ratio: 1.586;
   border: none;
-  border-radius: 14px;
+  border-radius: 16px;
   padding: 16px 18px 14px;
   color: #fff;
   text-align: left;
   cursor: pointer;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.22);
   position: relative;
   overflow: hidden;
   font-family: inherit;
   transition: transform .18s ease;
+}
+.bankcard-vis::before {
+  content: '';
+  position: absolute;
+  left: -14%;
+  top: -22%;
+  width: 58%;
+  height: 95%;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0));
+  pointer-events: none;
 }
 .bankcard-vis::after {
   content: '';
@@ -7471,7 +7570,12 @@ button:disabled {
 }
 .bankcard-vis-chip {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin: 2px 0 -2px;
+}
+.bankcard-vis-nfc {
+  margin-right: 2px;
 }
 .bankcard-vis-no {
   font-size: 17px;
@@ -7511,6 +7615,47 @@ button:disabled {
 .bankcard-wrap-bal {
   font-size: 12.5px;
   color: #8e8e93;
+}
+/* 卡面颜色选择（mini 卡式色板） */
+.bank-color-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px 6px;
+  margin: 2px 0 4px;
+}
+.bank-color-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.bank-color-fill {
+  width: 48px;
+  height: 30px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  transition: box-shadow .15s ease, transform .15s ease;
+}
+.bank-color-swatch.on .bank-color-fill {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3), 0 0 0 2px #fff, 0 0 0 3.6px #1a1a1a;
+}
+.bank-color-swatch:active .bank-color-fill {
+  transform: scale(.92);
+}
+.bank-color-name {
+  font-size: 10.5px;
+  color: #8a8a8e;
+}
+.bank-color-swatch.on .bank-color-name {
+  color: #1a1a1a;
+  font-weight: 600;
 }
 /* 银行卡详情 */
 .bank-detail-body {

@@ -46,6 +46,8 @@ export interface BankCard {
   cardTail: string
   /** 完整卡号（数字串，旧数据可能缺失，展示时回退尾号） */
   cardNo?: string
+  /** 卡面颜色索引（CARD_COLORS 下标；-1/缺省 = 经典，跟随银行主色） */
+  colorIdx?: number
   holder: string
   phone: string
   cardType: string

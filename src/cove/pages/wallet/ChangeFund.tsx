@@ -9,6 +9,9 @@ const RATE = '1.9860%'
 /* 近 7 日每万份收益示意（开通页趋势图） */
 const YIELD_BARS = [0.52, 0.55, 0.53, 0.56, 0.58, 0.55, 0.6]
 
+/* 收益试算：转入 ¥10,000 的预计每日收益 */
+const CALC_DAILY = Math.round((10000 * 0.01986) / 365 * 100) / 100
+
 export default function ChangeFund({ onBack, onOpenBills }: { onBack: () => void; onOpenBills: () => void }) {
   const [mode, setMode] = useState<null | '转入' | '转出'>(null)
   const [val, setVal] = useState('')
@@ -51,7 +54,7 @@ export default function ChangeFund({ onBack, onOpenBills }: { onBack: () => void
         <div className="page-body">
           <div className="fund-brand">
             <span className="fund-logo">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
                 <path d="M12 3 4.5 7v7c0 4 3 7 7.5 9 4.5-2 7.5-5 7.5-9V7L12 3Z" fill="#ffc300" />
                 <path d="m12 7.5 1.6 3.4 3.6.5-2.6 2.5.6 3.6-3.2-1.7-3.2 1.7.6-3.6-2.6-2.5 3.6-.5L12 7.5Z" fill="#fff" />
               </svg>
@@ -73,10 +76,18 @@ export default function ChangeFund({ onBack, onOpenBills }: { onBack: () => void
             </div>
             <div className="fund-open-chart" aria-hidden="true">
               {YIELD_BARS.map((v, i) => (
-                <span key={i} className="fund-open-bar" style={{ height: `${28 + v * 90}px` }} />
+                <span key={i} className={`fund-open-bar${i === YIELD_BARS.length - 1 ? ' hot' : ''}`} style={{ height: `${28 + v * 90}px` }} />
               ))}
             </div>
+            <div className="fund-open-chart-cap">
+              <span className="fund-open-chart-dot" />
+              近7日收益率走势 · 低风险
+            </div>
             <div className="fund-open-slogan">零钱转入零钱通，能赚又能花</div>
+            <div className="fund-open-calc">
+              <span>收益试算</span>
+              <span className="fund-open-calc-main">转入 ¥10,000，预计每日收益 <em>¥{CALC_DAILY.toFixed(2)}</em></span>
+            </div>
           </div>
 
           <div className="fund-open-points">
@@ -131,6 +142,11 @@ export default function ChangeFund({ onBack, onOpenBills }: { onBack: () => void
           <button className="btn-orange-big fund-open-btn" onClick={openFund}>
             开通零钱通
           </button>
+          <div className="fund-open-links">
+            <span>了解零钱通</span>
+            <i />
+            <span>常见问题</span>
+          </div>
           <div className="fund-open-note">1分钱起转入 · 转出无手续费 · 开通不收任何费用</div>
         </div>
         {hint && <div className="chat-toast">{hint}</div>}

@@ -123,31 +123,31 @@ export default function WalletHome({
 
         <div className="wallet-pay-grid">
           <button className="wallet-pay-item" onClick={() => onOpen('paycode')}>
-            <span className="wallet-pay-icon" style={{ background: 'linear-gradient(135deg,#2fd66f,#07c160)' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <rect x="4" y="4" width="6.5" height="6.5" rx="1.4" stroke="#fff" strokeWidth="1.7" />
-                <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.4" stroke="#fff" strokeWidth="1.7" />
-                <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.4" stroke="#fff" strokeWidth="1.7" />
-                <path d="M13.5 17h3m3 0h.5M13.5 13.5h.5M17 20h3.5" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" />
+            <span className="wallet-pay-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+                <rect x="4" y="4" width="6.5" height="6.5" rx="1.4" />
+                <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.4" />
+                <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.4" />
+                <path d="M13.5 17h3m3 0h.5M13.5 13.5h.5M17 20h3.5" />
               </svg>
             </span>
             <span className="wallet-pay-name">付款码</span>
           </button>
           <button className="wallet-pay-item" onClick={() => onOpen('receivecode')}>
-            <span className="wallet-pay-icon" style={{ background: '#fa8c16' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <rect x="4" y="4" width="6.5" height="6.5" rx="1.4" stroke="#fff" strokeWidth="1.7" />
-                <path d="M13.5 5h5.5v5.5M13.5 13.5h5.5V19" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" />
-                <path d="M4 13.5h6.5V19H4z" stroke="#fff" strokeWidth="1.7" strokeLinejoin="round" />
+            <span className="wallet-pay-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4" y="4" width="6.5" height="6.5" rx="1.4" />
+                <path d="M13.5 5h5.5v5.5M13.5 13.5h5.5V19" />
+                <path d="M4 13.5h6.5V19H4z" />
               </svg>
             </span>
             <span className="wallet-pay-name">收款码</span>
           </button>
           <button className="wallet-pay-item" onClick={() => onOpen('scan')}>
-            <span className="wallet-pay-icon" style={{ background: 'linear-gradient(135deg,#6ba8ff,#1a7dff)' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
-                <path d="M4 12h16" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+            <span className="wallet-pay-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" />
+                <path d="M4 12h16" />
               </svg>
             </span>
             <span className="wallet-pay-name">扫一扫</span>

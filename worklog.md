@@ -493,3 +493,61 @@ Stage Summary:
 - 修改文件：public/ios/css/phone.css、src/cove/types.ts、src/cove/store.ts、
   src/cove/App.tsx、src/cove/pages/wallet/WalletHome.tsx、Change.tsx、
   BankCards.tsx、ChangeFund.tsx、src/cove/index.css
+
+---
+Task ID: 12
+Agent: Z.ai Code (主控)
+Task: 钱包第四轮细化：①零钱后面的灰色加深 ②付款码/收款码/扫一扫图标线条化
+③开通零钱通界面再美化（仿微信）④银行卡卡片再美化 + 添加时可选卡面颜色
+
+Work Log:
+- index.css：.wallet-balance-block 灰底 #e3e3e6 → #d1d1d6（明显加深）、label 同步
+  #55555a；.change-hero 从透明改为同款 #d1d1d6 圆角灰卡（margin 10/14、radius 14），
+  .change-title 变灰 —— 钱包页与零钱页的余额区形成统一灰底设计语言
+- WalletHome.tsx + index.css：付款码/收款码/扫一扫三个图标去彩色渐变底（绿/橙/蓝），
+  改 .wallet-pay-icon 线条样式（透明底 + 1.4px inset 描边 #d9d9de + currentColor 描边
+  SVG，与服务列表 .wi-line-icon 同语言）
+- ChangeFund.tsx + index.css 开通页美化：
+  - .fund-open-page 专属柔和暖渐变（#ffbd59→#ffd98a→#f4f4f5，与主页饱和橙区分）
+  - 品牌头放大（38px 白底 logo 带投影、21px 标题）、.fund-card 暖色投影
+  - 收益率 38px；7 柱图：常态浅金渐变、末柱 .hot 高亮橙 + 顶部辉光；新增走势说明行
+    （近7日收益率走势 · 低风险 + 橙色图例块）
+  - 新增「收益试算」行（¥10,000 → 每日 ¥0.54 橙色数字，灰底圆角条）
+  - 开通按钮加 box-shadow 橙色投影 + :active scale；新增底部「了解零钱通 · 常见问题」
+    链接行；CALC_DAILY 常量按利率程序化计算
+- types.ts：BankCard 新增 colorIdx?: number（-1/缺省=经典跟随银行主色）
+- BankCards.tsx + index.css 银行卡美化 + 选色：
+  - CARD_COLORS 六色色板（曜石黑/深海蓝/翡翠绿/酒红/香槟金/暮紫）+「经典」（跟随银行）
+  - 添加表单：顶部「卡面预览」实时预览卡（随银行/类型/卡号/持卡人/颜色联动）+
+    「卡片颜色」mini 卡式色板（4列网格、选中白圈+黑描边+白勾、按压缩放）
+  - CardVisual：colorIdx 选中时用双色渐变（125deg），经典走银行主色；新增 NFC 非接触
+    波纹图标（芯片行右侧）；UNIONPAY 银联标识改为全尺寸显示（原仅大卡）
+  - .bankcard-vis 质感升级：16px 圆角、0 10px 26px 深投影、::before 左上径向高光
+    （原有 ::after 斜向光带保留）；save() 写入 colorIdx，列表/详情共用 CardVisual 自动生效
+- 端到端验证（agent-browser 390x844 + 计算样式断言 + VLM 截图审查 + 壳层集成冒烟）：
+  - 钱包页：零钱块 rgb(209,209,214)=#d1d1d6 ✓ label rgb(85,85,90) ✓；
+    三个付款图标 background rgba(0,0,0,0) + inset 1.4px rgb(217,217,222) +
+    color rgb(58,58,60) ✓（VLM 确认线条描边无彩色底）
+  - 零钱页：hero 灰底 14px 圆角、金额居中 ✓（VLM 确认圆角灰卡）
+  - 零钱通开通页：暖渐变/38px 收益率/7柱+末柱高亮/走势说明/收益试算 ¥0.54/
+    CTA 投影/底部链接全部渲染 ✓（VLM 确认无重叠溢出）；协议取消勾选→开通→
+    toast 拦截「请先阅读并同意相关协议」✓；勾选→开通→「零钱通已开通」+主页
+    ¥1,288.07 ✓（重置 fundOpened 走 IndexedDB + reload）
+  - 银行卡：添加表单 7 色板（经典+6色）4+3 网格、选中勾选+外圈 ✓（VLM 确认）；
+    选翡翠绿→预览卡即变绿渐变 ✓；切深海蓝→生成卡号→保存→列表卡
+    rgb(18,58,117)→rgb(49,107,181) 渐变 + NFC + UNIONPAY + 16px 圆角 ✓；
+    点卡→详情页大卡同色 + 7 行信息（所属银行/卡类型/卡号/持卡人/手机号/余额/绑定时间）✓
+  - 壳层集成（/ 路由）：解锁→点信息图标→APP 内恢复银行卡页（视图持久化）→
+    深海蓝卡正常渲染 → 返回钱包页零钱块/线条图标同 /?as=app 一致 ✓
+  - VLM 五屏 + 表单屏全部「无布局问题」；控制台零错误、dev.log 全 200、
+    lint 0 error（3条既有 warning）
+
+Stage Summary:
+- 四项需求全部落地：零钱余额区灰底加深（钱包页+零钱页统一 #d1d1d6 灰卡）；
+  付款码/收款码/扫一扫线条化（与服务图标统一黑白灰语言）；零钱通开通页仿微信精修
+  （柔和暖渐变+高亮柱图+收益试算+投影CTA+底部链接）；银行卡六色可选卡面
+  （实时预览+NFC+全尺寸银联标+质感升级）
+- 关键机制：BankCard.colorIdx 持久化选色（-1=经典），CardVisual 单点渲染列表/预览/详情；
+  开通页与主页用 .fund-open-page 类区分渐变基调
+- 修改文件：src/cove/types.ts、src/cove/pages/wallet/WalletHome.tsx、ChangeFund.tsx、
+  BankCards.tsx、src/cove/index.css（Change.tsx 结构未动，仅 CSS）
