@@ -1225,3 +1225,31 @@ Stage Summary:
 - 纯答疑任务,无代码变更:录音不占任何持久化空间(内存临时
   ~32KB/秒,说完即回收);占用存储的只有聊天文字与设置(通常
   <1MB)。音频从不保存,故也不支持回听语音
+
+---
+Task ID: 29
+Agent: Z.ai Code (main)
+Task: 回答「有没有完全免费的语音识别」——web-search 核实各方案现状
+
+Work Log:
+- 通过 web-search 技能(z-ai CLI)核实五路信息:
+  · 讯飞开放平台:语音听写试用额度 5 万次/1 年(xfyun 官方文档);
+  · 硅基流动 SiliconFlow:存在免费模型群,SenseVoiceSmall ASR 标 0 元;
+  · sherpa-onnx WASM:浏览器内实时离线识别方案成熟(官方文档 +
+    npm 包 v1.13.7,unpacked ~15MB,含 wasm;社区已有 Web Worker
+    部署实践);
+  · Groq 免费档:30 req/min、14,400 req/天,但海外服务;
+  · 百度短语音:新用户可领免费试用资源。
+- GitHub API 核实 k2-fsa/sherpa-onnx asr-models release(498 资产):
+  · streaming-zipformer-zh-14M-2023-02-23.tar.bz2 = 70.6MB(纯中文
+    流式,含 fp32+int8,实际 int8 onnx 约 15~20MB);
+  · bilingual-small 437MB / sense-voice 999MB(过大,排除);
+  · paraformer-zh-small 74MB(非流式备选)。
+- 结论答复用户:三类完全免费方案(浏览器自带/本地离线 sherpa-onnx/
+  云端免费额度),推荐离线本地引擎,待用户确认后集成
+
+Stage Summary:
+- 纯调研答疑,无代码变更;已确认离线引擎技术路线可行:
+  sherpa-onnx npm v1.13.7(wasm)+ zh-14M 流式模型(~70MB 一次性
+  下载,GitHub release/HF 双源,之后浏览器缓存离线用)
+- 若用户确认,下一步 = Task 30:集成第三引擎「离线识别」
