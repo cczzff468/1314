@@ -5827,7 +5827,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: #fa8c16;
+  background: linear-gradient(180deg, #f7a85c, #ed8e35);
   border-radius: 8px;
   padding: 20px 14px;
   color: #fff;
@@ -5924,8 +5924,8 @@ button:disabled {
   box-shadow: 0 2px 10px rgba(229, 83, 61, 0.24);
 }
 .receipt-card.tf {
-  background: #fa8c16;
-  box-shadow: 0 2px 10px rgba(250, 140, 22, 0.28);
+  background: linear-gradient(180deg, #f7a85c, #ed8e35);
+  box-shadow: 0 2px 10px rgba(237, 142, 53, 0.28);
 }
 .receipt-card.rc {
   background: linear-gradient(135deg, #34c985, #18a95b);

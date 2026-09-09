@@ -704,3 +704,31 @@ Stage Summary:
 - 关键修复：七类 flex 纵向 page-body 子项禁 flex-shrink —— 彻底解决矮视口下
   服务行/底部内容被裁剪且不可滚动的 bug 族（含 Task 14 同根因的泛化收尾）
 - 修改文件：src/cove/pages/wallet/WalletHome.tsx、src/cove/index.css
+
+---
+Task ID: 17
+Agent: main (Z.ai Code)
+Task: 转账卡片颜色对齐真实微信转账橙（用户：让转账卡片颜色跟微信转账颜色一样）
+
+Work Log:
+- 定位现状：聊天转账卡片 .tf-card 与回执卡 .receipt-card.tf 均用 Ant Design 橙
+  #fa8c16（偏深橙红），真实微信为柔和金橙
+- 取证真实色值：image-search 搜真实微信截图（第1张腾讯来源为转账记录列表非目标，
+  换关键词后命中荆楚网真实聊天截图，含转账1680元消息卡片）
+- z-ai vision 对真实截图精确取色：主色 #F09A45、垂直微渐变顶部 #F7A85C →
+  底部 #ED8E35、¥圆圈 rgba(255,255,255,.25) 白边白符、白字、圆角 8px
+- 修改 src/cove/index.css 两处：
+  - .tf-card：background #fa8c16 → linear-gradient(180deg,#f7a85c,#ed8e35)
+  - .receipt-card.tf：同步渐变 + box-shadow 颜色改 rgba(237,142,53,.28)
+  - 其余不动（.tf-claim-ok 确认收款按钮为微信绿 #07c160 本就正确）
+- agent-browser 实测（390x844）：进苏晴聊天 → +面板 → 转账 88.88（备注测试转账）
+  → 转账成功 → 返回聊天，.tf-card 计算样式 backgroundImage=
+  linear-gradient(rgb(247,168,92),rgb(237,142,53))、radius 8px、210x80 ✓
+- z-ai vision 复查截图：橙色 ≈#F09A45 柔和金橙与真实微信高度一致、文字清晰、
+  与气泡布局协调 ✓
+- lint 0 error（3 条既有 warning 基线不变）、dev.log 全 200 无错误
+
+Stage Summary:
+- 转账卡片（含已收款回执卡）颜色由 Ant 橙 #fa8c16 换为真实微信转账金橙渐变
+  #F7A85C→#ED8E35（主色 #F09A45），经真实截图 VLM 取色 + 双重 VLM 视觉确认
+- 修改文件：src/cove/index.css（2 处）
