@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Friend, Message, RelativeCard, Sticker } from '../types'
+import type { Friend, Message, RelativeCard, Sticker, TransferInfo } from '../types'
 import { Avatar, Modal, formatTimeFull } from '../components/common'
 import { BackIcon, SendIcon, PlusBadgeIcon, MicIcon } from '../components/icons'
 import { appendMessage, loadMessages, loadProfile, saveMessages, loadApiSetting, loadChatBgs, loadStickers, saveStickers, uid, patchFriendMsg, updateWallet, addBill, loadWallet } from '../store'
@@ -246,6 +246,16 @@ function splitReplyMsgs(part: string, stickers: Sticker[], friendId: string, fri
   const tail = cleanSeg(part.slice(last), true)
   if (tail) out.push(mk({ text: tail }))
   return out
+}
+
+/** 转账卡片状态行文案（对齐真实微信：待收款显示备注或状态提示，已处理显示结果） */
+function transferNote(t: TransferInfo, from: Message['from']): string {
+  if (t.status === '待收款') {
+    if (t.note && t.note !== '转账') return t.note
+    return from === 'me' ? '你发起了一笔转账' : '请收款'
+  }
+  if (t.status === '已收款') return '已收款'
+  return '已被退还'
 }
 
 export default function Chat({
@@ -1223,18 +1233,41 @@ export default function Chat({
                         else openTransfer(m)
                       }}
                     >
-                      <div className="tf-card">
-                        <span className="tf-card-icon">¥</span>
-                        <span className="tf-card-texts">
-                          <span className="tf-card-amount">¥{formatMoney(m.transfer.amount)}</span>
-                          {m.transfer.note && m.transfer.note !== '转账' ? (
-                            <span className="tf-card-note">{m.transfer.note}</span>
-                          ) : m.from === 'me' ? (
-                            <span className="tf-card-note">你发起了一笔转账</span>
-                          ) : (
-                            <span className="tf-card-note">转账</span>
-                          )}
-                        </span>
+                      <div className={`tf-card ${m.transfer.status === '待收款' ? '' : 'tf-done'}`}>
+                        <div className="tf-card-body">
+                          <span className="tf-card-icon">
+                            {m.transfer.status === '待收款' ? (
+                              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path
+                                  fillRule="evenodd"
+                                  clipRule="evenodd"
+                                  d="M2 12C2 17.5228 6.47715 22 12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12ZM20.8 12C20.8 16.8601 16.8601 20.8 12 20.8C7.13989 20.8 3.2 16.8601 3.2 12C3.2 7.13989 7.13989 3.2 12 3.2C16.8601 3.2 20.8 7.13989 20.8 12ZM9.7899 9.92367H17V11.1237H9L7.54588 11.1237C7.26974 11.1237 7.04588 10.8998 7.04588 10.6237C7.04588 10.4757 7.11143 10.3353 7.2249 10.2403L10.3863 7.59332C10.5557 7.4515 10.808 7.47384 10.9498 7.64322C11.0632 7.77865 11.0743 7.97241 10.9772 8.11994L9.7899 9.92367ZM7.04588 14.08H14.256L13.0687 15.8837C12.9716 16.0313 12.9827 16.225 13.0961 16.3605C13.2379 16.5298 13.4902 16.5522 13.6596 16.4104L16.821 13.7634C16.9344 13.6684 17 13.528 17 13.38C17 13.1039 16.7761 12.88 16.5 12.88H15.0459H7.04588V14.08Z"
+                                />
+                              </svg>
+                            ) : m.transfer.status === '已退还' ? (
+                              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path
+                                  fillRule="evenodd"
+                                  clipRule="evenodd"
+                                  d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20.8C16.8601 20.8 20.8 16.8601 20.8 12C20.8 7.13989 16.8601 3.2 12 3.2C7.13989 3.2 3.2 7.13989 3.2 12C3.2 16.8601 7.13989 20.8 12 20.8ZM17 13C17 11.3431 15.6569 10 14 10H9.32548L10.677 8.64853L9.82843 7.8L7.84853 9.7799L7.35355 10.2749C7.15829 10.4701 7.15829 10.7867 7.35355 10.982L7.84853 11.477L9.82843 13.4569L10.677 12.6083L9.26863 11.2H14C14.9941 11.2 15.8 12.0059 15.8 13C15.8 13.9941 14.9941 14.8 14 14.8H12V16H14C15.6569 16 17 14.6569 17 13Z"
+                                />
+                              </svg>
+                            ) : (
+                              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path
+                                  fillRule="evenodd"
+                                  clipRule="evenodd"
+                                  d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20.8C16.8601 20.8 20.8 16.8601 20.8 12C20.8 7.13989 16.8601 3.2 12 3.2C7.13989 3.2 3.2 7.13989 3.2 12C3.2 16.8601 7.13989 20.8 12 20.8ZM16.6368 8.75L10.8284 14.5583L7.84853 11.5784L7 12.427L10.1213 15.5483C10.5118 15.9388 11.145 15.9388 11.5355 15.5483L17.4853 9.59853L16.6368 8.75Z"
+                                />
+                              </svg>
+                            )}
+                          </span>
+                          <span className="tf-card-texts">
+                            <span className="tf-card-amount">¥{formatMoney(m.transfer.amount)}</span>
+                            <span className="tf-card-note">{transferNote(m.transfer, m.from)}</span>
+                          </span>
+                        </div>
+                        <div className="tf-card-strip">微信转账</div>
                       </div>
                     </div>
                   ) : (

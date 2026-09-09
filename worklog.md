@@ -732,3 +732,44 @@ Stage Summary:
 - 转账卡片（含已收款回执卡）颜色由 Ant 橙 #fa8c16 换为真实微信转账金橙渐变
   #F7A85C→#ED8E35（主色 #F09A45），经真实截图 VLM 取色 + 双重 VLM 视觉确认
 - 修改文件：src/cove/index.css（2 处）
+
+---
+Task ID: 18
+Agent: main (Z.ai Code)
+Task: 转账卡片整体结构对齐真实微信（用户：让转账卡片跟微信一样）
+
+Work Log:
+- 取证（多源交叉验证）：
+  - 真实聊天截图（荆楚网，含¥1680转账）canvas 像素级测量：卡片宽 65.6% 屏宽、
+    橙体 68pt + 白色底条 ~30pt、橙色实色 #FBA03E≈WeUI #FA9D3B、底条白底 #FFF +
+    #B2B2B2 灰字左对齐
+  - GitHub 高仿微信项目 LiangNiang/fake-world 源码：两段式结构、状态图标
+    （待收款=圆环双向箭头/已收款=对勾/已退还=返回箭头，SVG 直接复刻）、
+    状态色 wechatOrange-3 #FA9D3B → wechatOrange-5 #FDE1C4 褪色、
+    状态文案矩阵（你发起了一笔转账/请收款/已收款/已被退还）
+  - VLM 无锚定记忆 ×2 + 双方案强制二选一测试：均裁定底条为「白底灰字」
+    （fake-world 源码的同色橙底条方案被否，其红包渲染色亦偏离真微信，采信度降权）
+- 实现两段式卡片（src/cove/pages/Chat.tsx + index.css）：
+  - .tf-card：230px、圆角 10px、overflow hidden；.tf-card-body 橙 #FA9D3B
+    （图标 34px SVG + ¥金额 17px/600 + 状态行 12px）；.tf-card-strip 白底
+    11px #B2B2B2「微信转账」左对齐
+  - 状态驱动：待收款=箭头图标+自定义备注(无则 你发起了一笔转账/请收款)、
+    已收款=对勾+「已收款」、已退还=返回箭头+「已被退还」；已处理整卡褪色
+    #FDE1C4 + 文字 #C87E2F（transferNote 辅助函数 + tf-done 类）
+  - .receipt-card.tf 同步为 #FA9D3B 纯色（Task 17 渐变收编为官方橙）
+- 端到端实测（agent-browser 390x844）：
+  - 待收款：发 ¥13.14（备注请收下）→ body #FA9D3B + 备注正常显示 ✓
+  - 已退还：AI 自动退还 ¥88.88/66.60 → #FDE1C4 褪色 + 已被退还 ✓
+  - 收款链路：IndexedDB 注入好友 ¥52 转账 → 点卡弹确认收款 → 确认后卡片
+    褪色「已收款」+ 回执消息出现 + 跳转账详情 ✓
+  - VLM 两态四项检查（两段结构/图标/颜色/无布局问题）全部通过 ✓
+- 测试数据清理：删 9 条测试消息（4转账+3退还+1回执+1文本）、7 条测试账单、
+  余额 718.66→666.66 恢复、苏晴会话摘要恢复（消息 22→13、账单 8→1）
+- lint 0 error（3 条既有 warning）、dev.log 全 200（1 条 AI 404 为未配置
+  API key 的既有行为）
+
+Stage Summary:
+- 转账卡片完全重构为真实微信两段式：橙体（WeUI 官方橙 #FA9D3B、圆环状态图标、
+  状态文案）+ 白底灰字「微信转账」条；已收款/已退还自动褪色 #FDE1C4
+- 修改文件：src/cove/pages/Chat.tsx（卡片 JSX + transferNote 辅助函数）、
+  src/cove/index.css（.tf-card 全家族样式重写 + .receipt-card.tf）
