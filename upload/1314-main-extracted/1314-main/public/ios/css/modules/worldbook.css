@@ -1,0 +1,204 @@
+/* ============ 世界书模块（Lorebook） ============ */
+
+.wb-body { padding: 4px 0 46px; }
+
+/* ---------- 库头部 ---------- */
+.wb-hero { padding: 16px 20px 10px; }
+.wb-hero-title { font-size: 22px; font-weight: 700; letter-spacing: -.3px; color: var(--text); }
+.wb-hero-sub { margin-top: 5px; font-size: 12.5px; color: var(--text-2); }
+
+/* ---------- 世界书卡片 ---------- */
+.wb-card {
+  background: var(--card);
+  border-radius: 14px;
+  margin: 0 16px 14px;
+  box-shadow: var(--shadow-card);
+  padding: 14px 16px 11px;
+  cursor: pointer;
+}
+.wb-card.off .wb-card-name,
+.wb-card.off .wb-card-meta { opacity: .45; }
+.wb-card-head { display: flex; align-items: center; gap: 9px; }
+.wb-card-icon {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: linear-gradient(160deg, #6CD673, #2E9E4E);
+  color: #fff; flex: none;
+  display: flex; align-items: center; justify-content: center;
+}
+.wb-card-icon svg { width: 19px; height: 19px; }
+.wb-card-name { font-size: 16.5px; font-weight: 600; color: var(--text); min-width: 0; }
+.wb-scope-chip {
+  flex: none; font-size: 10.5px; font-weight: 600;
+  padding: 3px 7px; border-radius: 6px;
+  background: var(--fill); color: var(--text-2);
+}
+.wb-scope-chip.s-global { background: rgba(52, 199, 119, .16); color: #2E9E4E; }
+.wb-scope-chip.s-local { background: rgba(255, 159, 10, .16); color: #D97A00; }
+.wb-scope-chip.s-exclusive { background: rgba(255, 45, 85, .13); color: #E0407F; }
+html[data-theme="dark"] .wb-scope-chip.s-global { color: #6CD673; }
+html[data-theme="dark"] .wb-scope-chip.s-local { color: #FFB340; }
+html[data-theme="dark"] .wb-scope-chip.s-exclusive { color: #FF6482; }
+.wb-card .switch { margin-left: 2px; }
+.wb-card-meta {
+  margin: 9px 0 0 43px;
+  font-size: 12.5px; color: var(--text-2);
+  display: flex; flex-direction: column; gap: 3px;
+}
+.wb-card-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 11px; }
+.wb-act-btn {
+  border: none; background: var(--fill); color: var(--accent);
+  font-size: 13px; font-weight: 500;
+  padding: 6.5px 15px; border-radius: 9px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.wb-act-btn.more { padding: 6.5px 9px; }
+.wb-act-btn svg { width: 15px; height: 15px; }
+.wb-act-btn:active { opacity: .55; }
+
+/* ---------- 条目列表页 ---------- */
+.wb-book-head { padding: 12px 20px 6px; }
+.wb-book-name { font-size: 21px; font-weight: 700; letter-spacing: -.3px; color: var(--text); }
+.wb-book-sub { font-size: 12.5px; color: var(--text-2); margin-top: 5px; line-height: 1.4; }
+
+.wb-fi-group { margin: 8px 16px 22px; }
+.wb-form-label {
+  padding: 0 4px 8px;
+  font-size: 13px; font-weight: 600; color: var(--text-2);
+}
+.wb-form-note { font-size: 11.5px; color: var(--text-3); margin: 7px 4px 0; line-height: 1.45; }
+.wb-ri-scope { background: #2E9E4E; }
+.wb-ri-doc { background: #D97A00; }
+.wb-ri-link { background: #E0407F; }
+
+.wb-new-entry {
+  display: block; width: calc(100% - 32px);
+  margin: 2px 16px 18px;
+  padding: 13px;
+  border: 1.5px dashed rgba(120, 120, 128, .38);
+  border-radius: 13px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 15px; font-weight: 600;
+  cursor: pointer;
+}
+.wb-new-entry:active { background: var(--fill); }
+
+/* ---------- 条目卡片 ---------- */
+.wb-entry {
+  background: var(--card);
+  border-radius: 13px;
+  margin: 0 16px 11px;
+  box-shadow: var(--shadow-card);
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.wb-entry.off .wb-entry-name,
+.wb-entry.off .wb-entry-meta { opacity: .45; }
+.wb-entry-head { display: flex; align-items: center; gap: 9px; }
+.wb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); flex: none; }
+.wb-dot.on { background: var(--success); }
+.wb-entry-name { font-size: 15.5px; font-weight: 600; color: var(--text); min-width: 0; }
+.wb-entry-pri {
+  margin-left: auto; flex: none;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-2);
+  background: var(--fill);
+  padding: 2.5px 7px; border-radius: 6px;
+}
+.wb-entry-more {
+  border: none; background: transparent; color: var(--text-3);
+  padding: 4px; cursor: pointer; flex: none;
+}
+.wb-entry-more svg { width: 16px; height: 16px; display: block; }
+.wb-entry-more:active { opacity: .5; }
+.wb-entry-meta {
+  margin: 7px 0 0 17px;
+  font-size: 12px; color: var(--text-2);
+  display: flex; flex-direction: column; gap: 3px;
+}
+
+/* ---------- 新建世界书对话框（居中，比系统 dialog 宽） ---------- */
+.wb-dialog { width: min(330px, 84%); text-align: left; }
+.wb-dialog-head { position: relative; display: flex; align-items: center; justify-content: center; padding: 16px 0 2px; }
+.wb-dialog-title { font-size: 16.5px; font-weight: 600; color: var(--text); }
+.wb-dialog-x {
+  position: absolute; left: 12px; top: 12px;
+  width: 26px; height: 26px; border-radius: 50%;
+  border: none; background: var(--fill); color: var(--text-2);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.wb-dialog-x:active { opacity: .5; }
+.wb-dialog-body { padding: 12px 18px 8px; }
+.wb-dialog-foot { display: flex; border-top: .5px solid var(--sep); }
+.wb-dialog-foot .wb-btn {
+  flex: 1; padding: 13.5px 0;
+  border: none; background: transparent;
+  font-size: 15.5px; cursor: pointer;
+}
+.wb-dialog-foot .wb-btn.ghost { color: var(--text-2); border-right: .5px solid var(--sep); }
+.wb-dialog-foot .wb-btn.fill { color: var(--accent); font-weight: 600; }
+.wb-dialog-foot .wb-btn:active { background: var(--fill); }
+
+/* ---------- 表单控件 ---------- */
+.wb-field { margin-bottom: 8px; }
+.wb-field .wb-field-label { margin: 0 0 7px; }
+.wb-field-label { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.wb-field-note { font-size: 11.5px; color: var(--text-3); margin-top: 7px; line-height: 1.45; }
+.wb-seg { margin: 0; }
+.wb-input {
+  display: block; width: 100%; box-sizing: border-box;
+  border: none; outline: none;
+  background: var(--fill);
+  border-radius: 10px;
+  padding: 10.5px 13px;
+  font-size: 15.5px; color: var(--text);
+  font-family: inherit;
+}
+.wb-input::placeholder { color: var(--text-3); }
+.wb-input:focus { background: var(--fill-2); }
+.wb-form-col { padding: 11px 16px 13px; border-top: .5px solid var(--sep); }
+.wb-form-col .wb-form-label { margin: 0 0 7px; }
+.wb-kw-input, .wb-pri-input { margin: 11px 13px 13px; width: calc(100% - 26px); }
+.wb-pri-input { max-width: 130px; }
+.wb-textarea {
+  display: block; width: 100%; box-sizing: border-box;
+  border: none; outline: none;
+  background: transparent;
+  padding: 13px 15px;
+  font-size: 15px; line-height: 1.55;
+  color: var(--text);
+  font-family: inherit;
+  min-height: 180px;
+  resize: vertical;
+}
+.wb-textarea::placeholder { color: var(--text-3); }
+.wb-save-btn { font-weight: 600; font-size: 15px; padding: 0 3px; }
+
+/* ---------- 绑定角色底部面板 ---------- */
+.wb-bind-body { padding-bottom: 6px; }
+.wb-bind-tip { font-size: 12px; color: var(--text-2); padding: 2px 4px 10px; }
+.wb-bind-empty { font-size: 14px; color: var(--text-2); text-align: center; padding: 22px 10px; }
+.wb-bind-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11.5px 6px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.wb-bind-row:active { background: var(--fill); }
+.wb-bind-check {
+  width: 22px; height: 22px; border-radius: 7px;
+  border: 1.5px solid var(--text-3);
+  flex: none; position: relative;
+  transition: all .18s ease;
+}
+.wb-bind-row.on .wb-bind-check { background: var(--accent); border-color: var(--accent); }
+.wb-bind-row.on .wb-bind-check::after {
+  content: '';
+  position: absolute; left: 5.5px; top: 5.5px;
+  width: 9px; height: 5px;
+  border-left: 2.2px solid #fff;
+  border-bottom: 2.2px solid #fff;
+  transform: rotate(-45deg);
+}
+.wb-bind-name { font-size: 16px; color: var(--text); min-width: 0; }

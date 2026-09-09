@@ -1,0 +1,738 @@
+/* ============ 设备外观 / 状态栏 / 主屏幕 / 锁屏 / 控制中心 ============ */
+
+#stage{
+  width:100vw; height:100vh; height:100dvh;
+  display:flex; align-items:center; justify-content:center;
+  background:
+    radial-gradient(1200px 700px at 15% 10%, #1c2740 0%, transparent 60%),
+    radial-gradient(900px 600px at 85% 90%, #2a1f3d 0%, transparent 55%),
+    #0c0e14;
+}
+
+#phone{
+  position:relative;
+  width:var(--phone-w); height:var(--phone-h);
+  border-radius:calc(var(--radius-screen) + 12px);
+  padding:11px;
+  background:linear-gradient(145deg,#3a3a3f,#151519 30%,#0a0a0c 50%,#1c1c22 70%,#44444c);
+  box-shadow:
+    0 0 0 1.5px rgba(255,255,255,.12) inset,
+    0 30px 80px rgba(0,0,0,.65),
+    0 8px 24px rgba(0,0,0,.5);
+}
+
+#screen{
+  position:relative;
+  width:100%; height:100%;
+  border-radius:var(--radius-screen);
+  overflow:hidden;
+  background:#000;
+  isolation:isolate;
+}
+
+/* ---------- 壁纸 ---------- */
+#wallpaper-home{
+  position:absolute; inset:0;
+  background-size:cover; background-position:center;
+  z-index:0;
+  transition: background-image .4s ease;
+}
+#wallpaper-home::after{
+  content:''; position:absolute; inset:0;
+  background:rgba(0,0,0,.18);
+}
+
+/* ---------- 状态栏 ----------
+   默认（浅色背景应用）黑字；sb-dark（深色背景/壁纸）白字 */
+#statusbar{
+  position:absolute; top:0; left:0; right:0;
+  height:var(--sb-h);
+  display:flex; align-items:flex-end;
+  /* 右侧图标集群整体右移：右侧留白缩至 13（贴近屏幕右缘） */
+  padding:0 13px 10px 33px;
+  z-index:900;
+  color:#000;
+  font-size:17px; font-weight:600;
+  pointer-events:none;
+  transition:color .28s ease; /* 背景色自适应时黑白文字平滑过渡 */
+}
+#statusbar.sb-dark{ color:#fff; }
+/* 深色主题下应用背景也是深色 → 始终白字 */
+html[data-theme="dark"] #statusbar{ color:#fff; }
+
+.sb-time{
+  width:56px; text-align:left;
+  letter-spacing:.2px;
+  font-variant-numeric:tabular-nums;
+}
+.sb-right{ margin-left:auto; display:flex; align-items:center; gap:5px; }
+
+/* 信号：iOS 全面屏 4 格条 */
+.sb-signal{ display:flex; align-items:flex-end; gap:2px; height:11.5px; }
+.sb-signal i{ width:3.2px; border-radius:1.4px; background:currentColor; display:block; }
+.sb-signal i:nth-child(1){ height:4.5px; }
+.sb-signal i:nth-child(2){ height:6.8px; }
+.sb-signal i:nth-child(3){ height:9px; }
+.sb-signal i:nth-child(4){ height:11.4px; }
+
+/* WiFi：iOS 真实比例（细描边 1.6 + 弧间留白约 1，圆头端点 + 圆点） */
+.sb-wifi{ margin-top:.5px; flex:none; display:block; }
+
+.sb-batt-wrap{ display:flex; align-items:center; gap:4.5px; }
+.sb-batt-num{
+  font-size:14.5px; font-weight:600; margin-top:-.5px;
+  font-variant-numeric:tabular-nums;
+}
+.sb-batt{
+  position:relative; width:25.5px; height:12.5px;
+  border:1px solid currentColor; border-radius:3.9px;
+  /* iOS 电池描边为 ~40% 不透明度，颜色跟随浅/深色自动反转 */
+  border-color:color-mix(in srgb, currentColor 40%, transparent);
+}
+.sb-batt::after{ /* 电池正极凸点（同样 40% 不透明度） */
+  content:''; position:absolute; right:-3.2px; top:3.85px;
+  width:1.5px; height:4.8px; border-radius:0 1px 1px 0;
+  background:color-mix(in srgb, currentColor 40%, transparent);
+}
+.sb-batt-fill{
+  position:absolute; left:1px; top:.5px; bottom:.5px;
+  border-radius:2.5px; background:currentColor;
+  transition:width .5s ease, background-color .3s ease;
+}
+.sb-batt.low .sb-batt-fill{ background:var(--danger); }
+.sb-batt.low{ border-color:color-mix(in srgb, var(--danger) 55%, transparent); }
+.sb-batt.low::after{ background:color-mix(in srgb, var(--danger) 55%, transparent); }
+.sb-batt-bolt{
+  position:absolute; left:50%; top:50%;
+  width:8.5px; height:10.5px;
+  transform:translate(-50%,-54%);
+  color:#fff;
+  display:none;
+  filter:drop-shadow(0 0 1.5px rgba(0,0,0,.3));
+}
+.sb-batt.charging .sb-batt-bolt{ display:block; }
+.sb-batt.charging .sb-batt-fill{ background:var(--success); }
+
+/* ---------- 动态岛 ----------
+   屏宽 371px，真实 iPhone 岛/屏比 ≈ 125/393 → 120px 比例最准，且不碰状态栏图标 */
+#island{
+  position:absolute; top:11px; left:50%; transform:translateX(-50%);
+  width:120px; height:36px; border-radius:20px;
+  background:#000;
+  z-index:910;
+  display:flex; align-items:center; justify-content:center;
+  overflow:hidden;
+  transition:width .45s var(--ease-ios), height .45s var(--ease-ios), border-radius .45s var(--ease-ios);
+  box-shadow:0 0 0 .5px rgba(255,255,255,.06);
+}
+#island.expanded{ width:216px; height:64px; border-radius:32px; cursor:pointer; }
+.island-music{ display:none; width:100%; height:100%; align-items:center; padding:0 14px; gap:10px; }
+#island.expanded .island-music{ display:flex; }
+.island-art{
+  width:40px; height:40px; border-radius:8px; overflow:hidden; flex:none;
+  background:var(--fill);
+}
+.island-art img{ width:100%; height:100%; object-fit:cover; }
+.island-music-info{ flex:1; min-width:0; }
+.island-music-title{ color:#fff; font-size:12px; font-weight:600; }
+.island-bars{ display:flex; align-items:flex-end; gap:2.5px; height:16px; margin-left:auto; }
+.island-bars i{ width:2.5px; background:var(--wechat); border-radius:1px; animation:islandBar 1s ease-in-out infinite; }
+.island-bars i:nth-child(1){ height:60%; animation-delay:0s; }
+.island-bars i:nth-child(2){ height:90%; animation-delay:.2s; }
+.island-bars i:nth-child(3){ height:40%; animation-delay:.4s; }
+.island-bars i:nth-child(4){ height:75%; animation-delay:.6s; }
+@keyframes islandBar{ 0%,100%{transform:scaleY(.4)} 50%{transform:scaleY(1)} }
+.island-dot{ width:10px; height:10px; border-radius:50%; background:var(--danger); animation:pulse 1.2s infinite; }
+
+/* ---------- 主屏幕 ---------- */
+#home{
+  position:absolute; inset:0; z-index:1;
+  display:none; flex-direction:column;
+  padding-top:calc(var(--sb-h) + 8px);
+}
+#home.show{ display:flex; animation:fadeIn .3s ease both; }
+
+#app-grid{
+  flex:1;
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  grid-auto-rows:94px;
+  padding:8px 22px 0;
+  align-content:start; /* 图标从顶部聚拢排布（图标间更紧凑，富余留到底部） */
+  gap:13px 5px;
+}
+.app-icon-cell{
+  display:flex; flex-direction:column; align-items:center; gap:5px;
+  cursor:pointer;
+  position:relative; /* 删除角标挂点（不受 shape overflow 裁剪） */
+  -webkit-touch-callout:none;
+  touch-action:none; /* 触屏拖拽换位：禁止浏览器手势抢占 pointer 事件 */
+}
+.app-icon-cell:active .app-icon-shape{ transform:scale(.88); opacity:.8; }
+.app-icon-shape{
+  width:61px; height:61px;
+  border-radius:14.5px;
+  overflow:hidden;
+  box-shadow:0 4px 10px rgba(0,0,0,.22);
+  transition:transform .3s var(--ease-spring), opacity .2s;
+}
+.app-icon-shape svg{ width:100%; height:100%; display:block; }
+/* 自定义图标（主题 App 上传的图片）：shape 的 overflow+圆角裁出 squircle */
+.app-icon-shape .app-icon-img{
+  width:100%; height:100%; display:block;
+  object-fit:cover; border-radius:0;
+}
+.app-icon-label{
+  font-size:11.5px; font-weight:500; color:#fff;
+  letter-spacing:.1px;
+  text-shadow:0 1px 3px rgba(0,0,0,.45);
+  max-width:76px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.badge-dot{
+  position:relative;
+}
+.badge-dot::after{
+  content:''; position:absolute; top:-2px; right:-2px;
+  width:10px; height:10px; border-radius:50%;
+  background:var(--danger); border:1.5px solid rgba(255,255,255,.9);
+  box-shadow:0 1px 3px rgba(0,0,0,.3);
+}
+
+/* 桌面天气小组件（截图样式：蓝色渐变方形大温度卡片） */
+.home-widget{
+  grid-column:span 2;
+  grid-row:span 2;
+  height:178px;
+  align-self:center;
+  border-radius:26px;
+  overflow:hidden;
+  position:relative;
+  cursor:pointer;
+  touch-action:none; /* 触屏长按拖拽 */
+  background:linear-gradient(135deg,#5BA8E4 0%,#3E7FD0 52%,#2E64B8 100%);
+  box-shadow:0 6px 18px rgba(0,0,0,.24);
+}
+.home-widget:active{ transform:scale(.97); }
+/* 云雾光晕：左上亮青、右上白雾、右下深 */
+.home-widget::before{
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:
+    radial-gradient(130% 100% at 18% 0%, rgba(255,255,255,.32), transparent 55%),
+    radial-gradient(90% 80% at 100% 0%, rgba(255,255,255,.18), transparent 60%),
+    radial-gradient(120% 90% at 100% 100%, rgba(20,50,110,.35), transparent 65%);
+}
+.hw-inner{
+  position:absolute; inset:0;
+  padding:14px 16px 12px;
+  display:flex; flex-direction:column; justify-content:space-between;
+  color:#fff;
+}
+.hw-top{ display:flex; justify-content:space-between; align-items:flex-start; }
+.hw-temp{
+  display:flex; align-items:flex-start;
+  font-weight:700; line-height:.95;
+  letter-spacing:-2px;
+}
+.hw-temp .hw-t{ font-size:43px; font-variant-numeric:tabular-nums; }
+.hw-temp .hw-deg{ font-size:14px; font-weight:600; margin-top:4px; letter-spacing:0; }
+.hw-cond{ font-size:13px; font-weight:500; opacity:.95; margin-top:2px; }
+.hw-icon{ position:relative; width:38px; height:38px; flex:none; filter:drop-shadow(0 3px 8px rgba(0,0,0,.2)); }
+.hw-icon svg{ width:100%; height:100%; }
+.hw-bottom{ display:flex; align-items:flex-end; }
+.hw-left{ display:flex; flex-direction:column; gap:2px; }
+.hw-air{ font-size:12.5px; font-weight:500; }
+.hw-hilo{ font-size:12.5px; opacity:.9; font-variant-numeric:tabular-nums; }
+.hw-city{
+  margin-left:auto; align-self:flex-end;
+  font-size:14px; font-weight:500;
+  color:rgba(255,255,255,.62);
+}
+
+/* ---------- 主屏抖动编辑模式 ---------- */
+.home-widget.jiggle,
+.app-icon-cell.jiggle{
+  animation:jiggle .26s ease-in-out infinite alternate;
+}
+@keyframes jiggle{
+  0%{ transform:rotate(-1.8deg) translateY(-.4px); }
+  100%{ transform:rotate(1.8deg) translateY(.4px); }
+}
+.app-icon-cell.dragging,
+.home-widget.dragging{
+  z-index:20;
+  opacity:.95;
+  filter:drop-shadow(0 14px 32px rgba(0,0,0,.45));
+  border-radius:16px;
+  cursor:grabbing;
+}
+/* 拖拽中不触发按压缩小/变淡（:active 会全程生效，图标会一直缩着） */
+.app-icon-cell.dragging .app-icon-shape,
+.app-icon-cell.dragging:active .app-icon-shape{
+  transform:none;
+  opacity:1;
+}
+.home-widget.dragging:active{ transform:none; }
+/* 删除角标：挂在 cell 上（shape 的 overflow:hidden 会把探出部分裁掉） */
+.icon-del{
+  position:absolute; top:-7px; left:calc(50% - 38px);
+  width:24px; height:24px; border-radius:50%;
+  background:rgba(22,22,26,.86);
+  backdrop-filter:blur(6px) saturate(1.5);
+  -webkit-backdrop-filter:blur(6px) saturate(1.5);
+  display:flex; align-items:center; justify-content:center;
+  border:none; padding:0; cursor:pointer; z-index:3;
+  box-shadow:0 3px 10px rgba(0,0,0,.42), inset 0 0 0 .5px rgba(255,255,255,.3), inset 0 1px 1px rgba(255,255,255,.16);
+  animation:popIn .22s var(--ease-spring) both;
+}
+.icon-del svg{ width:11px; height:11px; }
+.icon-del:active{ background:rgba(255,59,48,.94); transform:scale(.86); }
+/* 编辑模式顶栏：恢复默认（左）+ 完成（右） */
+.home-edit-bar{
+  position:absolute;
+  top:calc(var(--sb-h) + 8px);
+  left:0; right:0;
+  display:flex; justify-content:space-between;
+  padding:0 18px;
+  box-sizing:border-box;
+  z-index:30;
+  pointer-events:none; /* 空白区域不遮挡图标拖拽 */
+  animation:barIn .3s var(--ease-ios) both;
+}
+@keyframes barIn{
+  from{ transform:translateY(-16px); opacity:0; }
+  to{ transform:translateY(0); opacity:1; }
+}
+.heb-btn{
+  pointer-events:auto;
+  padding:8px 19px; border-radius:19px;
+  font-size:14px; font-weight:600;
+  border:none; cursor:pointer;
+  backdrop-filter:var(--blur-heavy);
+  -webkit-backdrop-filter:var(--blur-heavy);
+}
+.heb-btn.ghost{
+  background:rgba(28,28,32,.5); color:#fff;
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.32);
+}
+.heb-btn.fill{ background:#fff; color:#111; box-shadow:0 3px 12px rgba(0,0,0,.28); }
+.heb-btn:active{ transform:scale(.94); }
+
+/* 页面圆点 */
+#page-dots{
+  display:flex; justify-content:center; gap:7px;
+  padding:10px 0 6px;
+}
+#page-dots i{ width:7px; height:7px; border-radius:50%; background:rgba(255,255,255,.35); }
+#page-dots i.on{ background:#fff; }
+
+/* Dock */
+#dock{
+  margin:6px 14px 22px;
+  height:92px;
+  border-radius:34px;
+  display:flex; align-items:center; justify-content:space-evenly;
+  background:rgba(255,255,255,.16);
+  backdrop-filter:var(--blur-heavy);
+  -webkit-backdrop-filter:var(--blur-heavy);
+}
+#dock .app-icon-cell .app-icon-label{ display:none; }
+#dock .app-icon-shape{ width:61px; height:61px; }
+
+/* ---------- 应用窗口 ---------- */
+#app-layer{ position:absolute; inset:0; z-index:100; }
+#app-layer:empty{ pointer-events:none; }
+
+.app-window{
+  position:absolute; inset:0;
+  background:var(--bg);
+  display:flex; flex-direction:column;
+  overflow:hidden;
+  border-radius:var(--radius-screen);
+  transform-origin:center;
+}
+.app-window.anim-open{
+  animation:appOpen .5s var(--ease-ios) both;
+}
+.app-window.anim-close{
+  animation:appClose .38s var(--ease-ios) both;
+}
+@keyframes appOpen{
+  0%{ transform:scale(.08); opacity:.2; border-radius:60px; }
+  100%{ transform:scale(1); opacity:1; border-radius:var(--radius-screen); }
+}
+@keyframes appClose{
+  0%{ transform:scale(1); opacity:1; }
+  100%{ transform:scale(.08); opacity:0; }
+}
+
+/* ---------- Home指示条 ---------- */
+#home-bar{
+  position:absolute; bottom:8px; left:50%; transform:translateX(-50%);
+  width:139px; height:5px; border-radius:3px;
+  background:rgba(255,255,255,.92);
+  mix-blend-mode:difference;
+  z-index:950;
+  transition:opacity .3s;
+}
+
+/* ---------- 锁屏（截图样式：左对齐大时钟 + 农历） ---------- */
+#lock{
+  position:absolute; inset:0; z-index:800;
+  display:none; flex-direction:column; align-items:stretch;
+  color:#fff; overflow:hidden;
+  touch-action:none; /* 上滑解锁手势不被浏览器滚动接管 */
+}
+#lock.show{ display:flex; }
+#lock .lock-wallpaper{
+  position:absolute; inset:0; background-size:cover; background-position:center;
+  z-index:-1;
+}
+#lock .lock-wallpaper::after{ content:''; position:absolute; inset:0; background:rgba(0,0,0,.25); }
+/* 纯白/浅色壁纸 → 深色文字模式（几乎不压暗） */
+#lock.light-ui .lock-wallpaper::after{ background:rgba(0,0,0,.03); }
+
+.lock-inner{
+  width:100%; height:100%;
+  display:flex; flex-direction:column;
+  padding-top:calc(var(--sb-h) + 44px);
+  position:relative;
+}
+/* 时钟块：水平居中（iOS 原生锁屏样式），点击可解锁（备用入口） */
+.lock-clock-block{ text-align:center; cursor:pointer; }
+.lock-date{
+  font-size:16.5px; font-weight:500;
+  letter-spacing:.2px;
+  text-shadow:0 1px 8px rgba(0,0,0,.3);
+}
+#lock.light-ui .lock-date{ color:#3A3A3C; text-shadow:none; }
+.lock-time{
+  font-size:82px; font-weight:700;
+  letter-spacing:-1.5px;
+  line-height:1.02;
+  margin-top:4px;
+  font-variant-numeric:tabular-nums;
+  text-shadow:0 2px 20px rgba(0,0,0,.25);
+}
+#lock.light-ui .lock-time{ color:#111; text-shadow:none; }
+
+.lock-quick{
+  position:absolute; bottom:44px; left:0; right:0;
+  display:flex; justify-content:space-between;
+  padding:0 30px;
+}
+.lock-quick button{
+  width:52px; height:52px; border-radius:50%;
+  background:rgba(255,255,255,.16);
+  backdrop-filter:var(--blur-lite);
+  -webkit-backdrop-filter:var(--blur-lite);
+  display:flex; align-items:center; justify-content:center;
+  color:#fff;
+  border:none;
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.25);
+}
+.lock-quick button:active{ background:rgba(255,255,255,.32); }
+/* 浅色模式：浅灰底 + 灰图标（截图样式） */
+#lock.light-ui .lock-quick button{
+  background:#E9E9EE;
+  color:#8E8E93;
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+  box-shadow:inset 0 0 0 .5px rgba(0,0,0,.04);
+}
+#lock.light-ui .lock-quick button:active{ background:#DCDCE1; }
+
+/* ---------- 锁屏密码盘（iOS 风格 · 全屏毛玻璃， z 高于锁屏低于状态栏） ---------- */
+.pp-overlay{
+  position:absolute; inset:0; z-index:880;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding-top:24px; /* 密码盘整体下移一点点（用户反馈） */
+  background:rgba(8,8,12,.42);
+  backdrop-filter:blur(30px) saturate(1.15);
+  -webkit-backdrop-filter:blur(30px) saturate(1.15);
+  color:#fff;
+  animation:fadeIn .22s ease both;
+}
+.pp-overlay.out{ animation:fadeOut .2s ease both; }
+.pp-title{ font-size:19px; font-weight:600; letter-spacing:.3px; }
+.pp-sub{
+  font-size:13px; color:rgba(255,255,255,.62);
+  margin-top:7px; min-height:16px; text-align:center;
+  transition:color .2s;
+}
+.pp-sub.warn{ color:#FF6961; }
+.pp-dots{
+  display:flex; gap:23px;
+  margin:30px 0 46px;
+}
+.pp-dots span{
+  width:13px; height:13px; border-radius:50%;
+  border:1.5px solid rgba(255,255,255,.92);
+  transition:background .16s, border-color .16s, transform .16s;
+}
+.pp-dots span.fill{
+  background:#fff;
+  transform:scale(1.18);
+}
+.pp-dots.shake{ animation:ppShake .5s cubic-bezier(.36,.07,.19,.97) both; }
+@keyframes ppShake{
+  10%, 90%{ transform:translateX(-9px); }
+  20%, 80%{ transform:translateX(9px); }
+  30%, 50%, 70%{ transform:translateX(-13px); }
+  40%, 60%{ transform:translateX(13px); }
+}
+.pp-pad{
+  display:grid;
+  grid-template-columns:repeat(3, 78px);
+  grid-auto-rows:78px;
+  gap:16px 28px;
+}
+.pp-key{
+  width:78px; height:78px; border-radius:50%;
+  background:rgba(255,255,255,.13);
+  color:#fff;
+  border:none;
+  font-family:inherit;
+  font-size:31px; font-weight:400; line-height:1;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.14);
+  transition:background .15s;
+  cursor:pointer;
+}
+.pp-key small{
+  font-size:9.5px; font-weight:700; letter-spacing:2.2px;
+  color:rgba(255,255,255,.78);
+  margin-top:3px;
+}
+.pp-key:active{ background:rgba(255,255,255,.42); }
+.pp-key.blank{ background:none; box-shadow:none; pointer-events:none; }
+.pp-del{
+  width:78px; height:78px;
+  display:flex; align-items:center; justify-content:center;
+  background:none; border:none;
+  color:rgba(255,255,255,.85);
+  cursor:pointer;
+}
+.pp-del:active{ opacity:.45; }
+.pp-cancel{
+  margin-top:50px;
+  background:none; border:none;
+  color:rgba(255,255,255,.85);
+  font-size:16px; font-family:inherit;
+  cursor:pointer;
+}
+.pp-cancel:active{ opacity:.5; }
+/* 忘记密码（取消键下方，仅锁屏验证模式显示） */
+.pp-forgot{
+  margin-top:22px;
+  background:none; border:none;
+  color:rgba(255,255,255,.52);
+  font-size:12.5px; font-family:inherit;
+  text-decoration:underline;
+  text-underline-offset:3.5px;
+  text-decoration-color:rgba(255,255,255,.3);
+  cursor:pointer;
+  transition:color .18s ease;
+}
+.pp-forgot:active{ color:rgba(255,255,255,.9); }
+/* 忘记密码确认层（替代密码盘显示） */
+.pp-confirm{
+  display:flex; flex-direction:column; align-items:center; gap:24px;
+  max-width:290px;
+}
+.pp-cf-text{
+  font-size:14px; line-height:1.65;
+  color:rgba(255,255,255,.78);
+  text-align:center;
+}
+.pp-cf-acts{ display:flex; gap:14px; }
+.pp-cf-btn{
+  min-width:120px; padding:11px 18px;
+  border-radius:13px; border:none;
+  background:rgba(255,255,255,.14); color:#fff;
+  font-size:15px; font-weight:600; font-family:inherit;
+  cursor:pointer;
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.14);
+  transition:transform .15s var(--ease-ios, ease), opacity .18s ease, background .18s ease;
+}
+.pp-cf-btn:active{ transform:scale(.95); opacity:.75; }
+.pp-cf-btn.danger{
+  background:#FF453A;
+  box-shadow:0 4px 16px rgba(255,69,58,.38);
+}
+
+/* ---------- 多任务切换器 ---------- */
+/* 背景为当前壁纸重度模糊 + 暗色遮罩（.ts-bg/.ts-shade），暗色兜底 */
+#task-switcher{
+  position:absolute; inset:0; z-index:860;
+  display:none; flex-direction:column;
+  background:rgba(10,10,14,.62);
+  overflow:hidden;
+}
+/* 壁纸背景层：外扩 80px 防 blur 边缘露底 */
+.ts-bg{
+  position:absolute; inset:-80px; z-index:0;
+  background:center/cover no-repeat #101014;
+  filter:blur(34px) saturate(1.1);
+  pointer-events:none;
+}
+.ts-shade{
+  position:absolute; inset:0; z-index:0;
+  background:linear-gradient(180deg, rgba(10,10,16,.5), rgba(10,10,16,.34) 42%, rgba(8,8,12,.56));
+  pointer-events:none;
+}
+#task-switcher.show{ display:flex; animation:fadeIn .22s ease both; }
+#task-switcher.closing{ animation:fadeOut .2s ease both; }
+.ts-rail{
+  flex:1;
+  display:flex; align-items:center; gap:14px;
+  overflow-x:auto; overflow-y:hidden;
+  padding:100px 26px 0; /* 顶部留白：卡片组整体下移（卡片顶≈110px，贴近 iOS 切换器重心） */
+  scroll-snap-type:x mandatory;
+  -webkit-overflow-scrolling:touch;
+  justify-content:safe center; /* 单卡时水平居中（溢出时安全回退起点滚动） */
+  position:relative; z-index:1; /* 位于壁纸背景层之上 */
+}
+.ts-rail::-webkit-scrollbar{ display:none; }
+/* 卡片+脚注整组：名称在卡片下方 */
+.ts-item{
+  flex:none;
+  width:80%;
+  height:100%;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+  scroll-snap-align:center;
+}
+.ts-card{
+  width:100%;
+  max-height:calc(100% - 44px); /* 给下方脚注留位 */
+  aspect-ratio:0.4613; /* = 393/852：与实时界面比例完全一致 → 内容零裁切零空隙，卡片更矮 */
+  border-radius:32px;
+  display:flex; flex-direction:column;
+  position:relative;
+  background:linear-gradient(165deg,#3A3A40 0%,#222228 55%,#17171C 100%);
+  box-shadow:0 22px 52px rgba(0,0,0,.55);
+  cursor:pointer;
+  overflow:hidden;
+}
+.ts-card.enter{ animation:tsCardIn .42s var(--ease-ios) both; }
+@keyframes tsCardIn{
+  from{ transform:translateY(60px) scale(.82); opacity:0; }
+  to{ transform:translateY(0) scale(1); opacity:1; }
+}
+.ts-card:active{ transform:scale(.98); }
+.ts-card.cur{ box-shadow:0 26px 58px rgba(0,0,0,.62), 0 6px 22px rgba(0,0,0,.4); }
+.ts-card.closing{ animation:tsCardClose .26s var(--ease-ios) both; }
+@keyframes tsCardClose{ to{ transform:translateY(-110px) scale(.55); opacity:0; } }
+.ts-badge{
+  position:absolute; top:14px; left:16px;
+  font-size:10.5px; font-weight:600; color:rgba(255,255,255,.9);
+  background:rgba(14,14,18,.6);
+  padding:3.5px 9px; border-radius:10px;
+  z-index:3;
+}
+/* 实时界面快照区（底色取卡片深色：深色应用不再露浅色发丝缝） */
+.ts-snap-wrap{
+  flex:1;
+  position:relative;
+  overflow:hidden;
+  background:#0E0E12;
+}
+.ts-snap-wrap::after{ /* 顶部融入暗背景的渐隐 */
+  content:''; position:absolute; inset:0;
+  background:linear-gradient(180deg, rgba(0,0,0,.14), transparent 12%);
+  pointer-events:none;
+}
+.ts-snap{
+  position:absolute; top:0; left:0;
+  width:393px; height:852px;
+  transform-origin:0 0;
+  background:#0E0E12;
+}
+.ts-snap > *{ width:393px; height:852px; }
+/* iframe 应用（信息）的 srcdoc 实时快照：同尺寸随卡片缩放，禁交互 */
+.ts-snap > iframe.ts-live{ border:0; display:block; background:#fff; pointer-events:none; }
+/* 当前应用真实窗口搬入卡片：继续运行（真·实时界面），但不可交互 */
+.ts-snap .app-window{ border-radius:0; }
+.ts-snap .app-window,
+.ts-snap .app-window *{ pointer-events:none; }
+.ts-snap .app-window .app-back-fab{ display:none; }
+/* 卡片下方脚注：小图标 + 应用名（透明底，浮在模糊壁纸上） */
+.ts-foot{
+  flex:none;
+  height:36px;
+  display:flex; align-items:center; justify-content:center; gap:7px;
+  padding:0 12px;
+  max-width:100%;
+}
+.ts-mini{ width:22px; height:22px; border-radius:5.5px; overflow:hidden; box-shadow:0 2px 6px rgba(0,0,0,.45); flex:none; }
+.ts-mini svg{ width:100%; height:100%; display:block; }
+.ts-name{
+  color:#fff; font-size:14px; font-weight:600;
+  text-shadow:0 1px 5px rgba(0,0,0,.6);
+  max-width:70%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+/* 无快照占位卡片 */
+.ts-placeholder{
+  flex:1;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+}
+.ts-icon{ width:66px; height:66px; border-radius:16px; overflow:hidden; box-shadow:0 8px 20px rgba(0,0,0,.4); }
+.ts-icon svg{ width:100%; height:100%; display:block; }
+.ts-hint{
+  text-align:center; flex:none;
+  position:relative; z-index:1; /* 位于壁纸背景层之上 */
+  color:rgba(255,255,255,.6);
+  font-size:12px;
+  padding:10px 0 calc(22px + 10px);
+  text-shadow:0 1px 4px rgba(0,0,0,.5);
+}
+
+/* ---------- Toast ---------- */
+#layer-toast{
+  position:absolute; top:calc(var(--sb-h) + 12px); left:0; right:0;
+  display:flex; justify-content:center;
+  z-index:1200; pointer-events:none;
+}
+.toast{
+  max-width:80%;
+  background:rgba(40,40,45,.92);
+  color:#fff;
+  backdrop-filter:var(--blur-lite);
+  -webkit-backdrop-filter:var(--blur-lite);
+  padding:10px 18px; border-radius:22px;
+  font-size:14px; font-weight:500;
+  box-shadow:var(--shadow-pop);
+  animation:slideUp .3s var(--ease-ios) both;
+  display:flex; align-items:center; gap:8px;
+}
+.toast.out{ animation:fadeOut .25s ease both; }
+
+/* ---------- 手电筒全屏 ---------- */
+#torch-overlay{
+  position:absolute; inset:0; background:#fff; z-index:2000;
+  display:none;
+}
+
+/* ---------- 移动端适配（真机全屏） ---------- */
+@media (max-width:560px), (max-height:700px) and (pointer:coarse){
+  #stage{ background:#000; }
+  #phone{
+    width:100vw; height:100vh; height:100dvh;
+    border-radius:0; padding:0;
+    background:#000; box-shadow:none;
+  }
+  #screen{ border-radius:0; }
+  .app-window{ border-radius:0; }
+  /* 窄屏灵动岛按比例收窄，保证状态栏右侧图标不被遮挡 */
+  #island{ width:min(120px, 30.5vw); }
+}
+
+/* ---------- 沉浸应用（如内嵌的“信息”App）：隐藏 OS 系统栏与全局返回钮 ----------
+   界面由应用自身全屏接管，返回桌面由应用内按钮触发 closeApp */
+body[data-immersive] #statusbar,
+body[data-immersive] #home-bar {
+  opacity: 0;
+  pointer-events: none;
+}
+body[data-immersive] .app-back-fab {
+  display: none;
+}

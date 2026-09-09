@@ -1,0 +1,666 @@
+     1→     1→/* ============ 世界书（Lorebook）：AI 聊天的世界观设定库 ============
+     2→     2→   数据存 IndexedDB（AppleAI 库 worldbooks / wbentries 两张表），
+     3→     3→   同源下「信息」APP 聊天时读取并按 范围/关键词 匹配注入 System Prompt。
+     4→     4→   范围：全局=所有对话生效（无需关键词）；局部=命中关键词才触发（当前会话）；
+     5→     5→        专属=命中关键词且需手动绑定到角色。 */
+     6→     6→
+     7→     7→import { el, uid, haptic, fmtSmartTime } from '../core/utils.js';
+     8→     8→import { DB } from '../core/db.js';
+     9→     9→import { createNav, navBtn } from '../core/nav.js';
+    10→    10→import { toast, actionSheet, confirmDialog, promptDialog, escapeHtml, escapeAttr, sheet } from '../core/ui.js';
+    11→    11→import { Apps as AppIcons } from '../core/icons.js';
+    12→    12→
+    13→    13→let root = null;
+    14→    14→let nav = null;
+    15→    15→
+    16→    16→const PLUS_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 4.6v14.8M4.6 12h14.8"/></svg>';
+    17→    17→const MORE_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>';
+    18→    18→const X_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    19→    19→const BOOK_SVG = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 6.2C10.5 4.9 8.7 4.3 6.9 4.3c-1.1 0-2.2.2-2.9.6v13.5c.7-.4 1.8-.6 2.9-.6 1.8 0 3.6.6 5.1 1.9 1.5-1.3 3.3-1.9 5.1-1.9 1.1 0 2.2.2 2.9.6V4.9c-.7-.4-1.8-.6-2.9-.6-1.8 0-3.6.6-5.1 1.3z"/><path d="M12 6.2V20" stroke-width="1.5"/></svg>';
+    20→    20→const SCOPE_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.6"/><path d="M3.4 12h17.2M12 3.4c2.6 2.4 4 5.4 4 8.6s-1.4 6.2-4 8.6c-2.6-2.4-4-5.4-4-8.6s1.4-6.2 4-8.6z"/></svg>';
+    21→    21→const LINK_SVG = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 13.8a3.8 3.8 0 0 0 5.4 0l3.2-3.2a3.8 3.8 0 0 0-5.4-5.4l-1.4 1.4"/><path d="M13.8 10.2a3.8 3.8 0 0 0-5.4 0l-3.2 3.2a3.8 3.8 0 0 0 5.4 5.4l1.4-1.4"/></svg>';
+    22→    22→const DOC_SVG = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2.5H6.5A1.5 1.5 0 0 0 5 4v16a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 20V7.5z"/><path d="M14 2.5V7.5H19M8.5 12h7M8.5 15.5h4.5"/></svg>';
+    23→    23→
+    24→    24→/* 范围说明（与产品定义一致） */
+    25→    25→const SCOPES = {
+    26→    26→  global: { label: '全局', desc: '所有对话都生效，无需关键词触发', usage: '适合世界观框架、基础设定' },
+    27→    27→  local: { label: '局部', desc: '命中关键词才触发，仅在当前会话生效', usage: '适合特定角色、场景设定' },
+    28→    28→  exclusive: { label: '专属', desc: '命中关键词才触发，且需手动绑定到角色', usage: '适合角色专属秘密、特殊设定' },
+    29→    29→};
+    30→    30→
+    31→    31→export default {
+    32→    32→  id: 'worldbook',
+    33→    33→  name: '世界书',
+    34→    34→  icon: AppIcons.worldbook,
+    35→    35→  sbStyle: 'light',
+    36→    36→
+    37→    37→  mount(rootEl, ctx) {
+    38→    38→    root = rootEl;
+    39→    39→    root.innerHTML = '';
+    40→    40→    const overlay = el('div', '');
+    41→    41→    overlay.style.cssText = 'position:absolute;inset:0;z-index:10;';
+    42→    42→    root.appendChild(overlay);
+    43→    43→    nav = createNav(overlay);
+    44→    44→    const page = makeRootPage();
+    45→    45→    nav.setRoot(page);
+    46→    46→  },
+    47→    47→
+    48→    48→  unmount() {
+    49→    49→    root = null;
+    50→    50→    nav = null;
+    51→    51→  },
+    52→    52→};
+    53→    53→
+    54→    54→/* ============ 根页面：世界书管理（我的世界书库） ============ */
+    55→    55→function makeRootPage() {
+    56→    56→  const page = nav.makePage({
+    57→    57→    title: '世界书',
+    58→    58→    right: [navBtn(PLUS_SVG, () => newBook(), 'pill-btn')],
+    59→    59→    async build(body) {
+    60→    60→      body.classList.add('wb-body');
+    61→    61→      body.innerHTML = `
+    62→    62→        <div class="wb-hero">
+    63→    63→          <div class="wb-hero-title">我的世界书库</div>
+    64→    64→          <div class="wb-hero-sub" id="wb-stat"></div>
+    65→    65→        </div>
+    66→    66→        <div id="wb-list"></div>`;
+    67→    67→      await loadBooks(body);
+    68→    68→    },
+    69→    69→  });
+    70→    70→  /* 从条目页返回时刷新卡片统计（条目数/关键词数/最后更新） */
+    71→    71→  page.onShow = async () => {
+    72→    72→    const body = page.body;
+    73→    73→    if (body && body.querySelector('#wb-list') && body.querySelector('.wb-card')) await loadBooks(body);
+    74→    74→  };
+    75→    75→  return page;
+    76→    76→}
+    77→    77→
+    78→    78→async function loadBooks(body) {
+    79→    79→  const listEl = body.querySelector('#wb-list');
+    80→    80→  const statEl = body.querySelector('#wb-stat');
+    81→    81→  if (!listEl) return;
+    82→    82→  const books = await DB.all('worldbooks');
+    83→    83→  const entries = await DB.all('wbentries');
+    84→    84→  const byBook = new Map();
+    85→    85→  entries.forEach(e => {
+    86→    86→    if (e && e.bookId) {
+    87→    87→      if (!byBook.has(e.bookId)) byBook.set(e.bookId, []);
+    88→    88→      byBook.get(e.bookId).push(e);
+    89→    89→    }
+    90→    90→  });
+    91→    91→  books.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    92→    92→
+    93→    93→  /* 统计行：共 N 个世界书 · 最后更新: X */
+    94→    94→  if (books.length) {
+    95→    95→    let last = 0;
+    96→    96→    books.forEach(b => { last = Math.max(last, b.updatedAt || 0); });
+    97→    97→    entries.forEach(e => { last = Math.max(last, e.updatedAt || 0); });
+    98→    98→    statEl.textContent = `共 ${books.length} 个世界书 · 最后更新: ${fmtSmartTime(last)}`;
+    99→    99→  } else {
+   100→   100→    statEl.textContent = '还没有任何世界书';
+   101→   101→  }
+   102→   102→
+   103→   103→  listEl.innerHTML = '';
+   104→   104→  if (!books.length) {
+   105→   105→    listEl.innerHTML = `
+   106→   106→      <div class="empty-state">
+   107→   107→        ${BOOK_SVG.replace('width="19" height="19"', 'width="52" height="52"')}
+   108→   108→        <div class="es-title">没有世界书</div>
+   109→   109→        <div>点右上角 + 新建一个世界书</div>
+   110→   110→      </div>`;
+   111→   111→    return;
+   112→   112→  }
+   113→   113→  books.forEach(b => listEl.appendChild(bookCard(b, byBook.get(b.id) || [])));
+   114→   114→}
+   115→   115→
+   116→   116→function bookCard(book, entries) {
+   117→   117→  const kwCount = entries.reduce((n, e) => n + (Array.isArray(e.keywords) ? e.keywords.length : 0), 0);
+   118→   118→  const scope = SCOPES[book.scope] || SCOPES.global;
+   119→   119→  const card = el('div', 'wb-card' + (book.enabled ? '' : ' off'));
+   120→   120→  card.innerHTML = `
+   121→   121→    <div class="wb-card-head">
+   122→   122→      <div class="wb-card-icon">${BOOK_SVG}</div>
+   123→   123→      <div class="wb-card-name ellipsis">${escapeHtml(book.name || '未命名')}</div>
+   124→   124→      <div class="wb-scope-chip s-${book.scope}">${scope.label}</div>
+   125→   125→      <div class="switch ${book.enabled ? 'on' : ''}" role="switch" aria-label="启用世界书"></div>
+   126→   126→    </div>
+   127→   127→    <div class="wb-card-meta">
+   128→   128→      <div>条目: ${entries.length} · 关键词: ${kwCount}</div>
+   129→   129→      <div>范围: ${scope.label} · 更新: ${fmtSmartTime(book.updatedAt)}</div>
+   130→   130→    </div>
+   131→   131→    <div class="wb-card-actions">
+   132→   132→      <button class="wb-act-btn edit">编辑</button>
+   133→   133→      <button class="wb-act-btn more" aria-label="更多操作">${MORE_SVG}</button>
+   134→   134→    </div>`;
+   135→   135→
+   136→   136→  card.querySelector('.switch').addEventListener('click', async (e) => {
+   137→   137→    e.stopPropagation();
+   138→   138→    haptic(4);
+   139→   139→    book.enabled = !book.enabled;
+   140→   140→    book.updatedAt = Date.now();
+   141→   141→    await DB.put('worldbooks', book);
+   142→   142→    e.currentTarget.classList.toggle('on', book.enabled);
+   143→   143→    card.classList.toggle('off', !book.enabled);
+   144→   144→    statRefresh(book);
+   145→   145→    toast(book.enabled ? '已启用' : '已停用');
+   146→   146→  });
+   147→   147→  card.querySelector('.wb-act-btn.edit').onclick = (e) => { e.stopPropagation(); haptic(4); openBookEntries(book); };
+   148→   148→  card.querySelector('.wb-act-btn.more').onclick = (e) => { e.stopPropagation(); haptic(4); bookMenu(book); };
+   149→   149→  /* 卡片其余区域点击 = 进入编辑 */
+   150→   150→  card.addEventListener('click', (e) => {
+   151→   151→    if (e.target.closest('.switch') || e.target.closest('.wb-act-btn')) return;
+   152→   152→    haptic(4);
+   153→   153→    openBookEntries(book);
+   154→   154→  });
+   155→   155→  return card;
+   156→   156→}
+   157→   157→
+   158→   158→/* 顶层操作后刷新统计行 */
+   159→   159→async function statRefresh() {
+   160→   160→  const body = root && root.querySelector('.page-body');
+   161→   161→  if (!body) return;
+   162→   162→  const statEl = body.querySelector('#wb-stat');
+   163→   163→  if (!statEl) return;
+   164→   164→  const books = await DB.all('worldbooks');
+   165→   165→  const entries = await DB.all('wbentries');
+   166→   166→  if (books.length) {
+   167→   167→    let last = 0;
+   168→   168→    books.forEach(b => { last = Math.max(last, b.updatedAt || 0); });
+   169→   169→    entries.forEach(e => { last = Math.max(last, e.updatedAt || 0); });
+   170→   170→    statEl.textContent = `共 ${books.length} 个世界书 · 最后更新: ${fmtSmartTime(last)}`;
+   171→   171→  } else {
+   172→   172→    statEl.textContent = '还没有任何世界书';
+   173→   173→  }
+   174→   174→}
+   175→   175→
+   176→   176→async function bookMenu(book) {
+   177→   177→  const v = await actionSheet([
+   178→   178→    { text: book.enabled ? '停用世界书' : '启用世界书', value: 'toggle' },
+   179→   179→    { text: '重命名', value: 'rename' },
+   180→   180→    { text: '复制世界书', value: 'copy' },
+   181→   181→    { text: '删除世界书', value: 'del', danger: true },
+   182→   182→  ]);
+   183→   183→  if (!v) return;
+   184→   184→  if (v === 'toggle') {
+   185→   185→    book.enabled = !book.enabled;
+   186→   186→    book.updatedAt = Date.now();
+   187→   187→    await DB.put('worldbooks', book);
+   188→   188→    toast(book.enabled ? '已启用' : '已停用');
+   189→   189→  }
+   190→   190→  if (v === 'rename') {
+   191→   191→    const name = await promptDialog('重命名世界书', '', { value: book.name || '', okText: '好' });
+   192→   192→    if (name && name.trim()) {
+   193→   193→      book.name = name.trim();
+   194→   194→      book.updatedAt = Date.now();
+   195→   195→      await DB.put('worldbooks', book);
+   196→   196→      toast('已重命名');
+   197→   197→    }
+   198→   198→  }
+   199→   199→  if (v === 'copy') {
+   200→   200→    const nid = uid('wb');
+   201→   201→    await DB.put('worldbooks', { ...book, id: nid, name: (book.name || '未命名') + ' 副本', enabled: false, createdAt: Date.now(), updatedAt: Date.now() });
+   202→   202→    const entries = await DB.byIndex('wbentries', 'bookId', book.id);
+   203→   203→    const copies = entries.map(e => ({ ...e, id: uid('wbe'), bookId: nid, updatedAt: Date.now() }));
+   204→   204→    if (copies.length) await DB.bulkPut('wbentries', copies);
+   205→   205→    toast('已复制（默认停用）');
+   206→   206→  }
+   207→   207→  if (v === 'del') {
+   208→   208→    const ok = await confirmDialog('删除世界书', `删除「${book.name || '未命名'}」及其全部条目？`, { okText: '删除', danger: true });
+   209→   209→    if (!ok) return;
+   210→   210→    const entries = await DB.byIndex('wbentries', 'bookId', book.id);
+   211→   211→    for (const e of entries) await DB.del('wbentries', e.id);
+   212→   212→    await DB.del('worldbooks', book.id);
+   213→   213→    toast('已删除');
+   214→   214→  }
+   215→   215→  const body = root && root.querySelector('.page-body');
+   216→   216→  if (body && body.querySelector('#wb-list')) await loadBooks(body);
+   217→   217→}
+   218→   218→
+   219→   219→/* ============ 新建世界书（居中对话框：名称 + 范围） ============ */
+   220→   220→function newBookDialog() {
+   221→   221→  return new Promise((resolve) => {
+   222→   222→    const mask = el('div', 'dialog-mask');
+   223→   223→    const d = el('div', 'dialog wb-dialog');
+   224→   224→    d.innerHTML = `
+   225→   225→      <div class="wb-dialog-head">
+   226→   226→        <button class="wb-dialog-x" aria-label="关闭">${X_SVG}</button>
+   227→   227→        <div class="wb-dialog-title">新建世界书</div>
+   228→   228→      </div>
+   229→   229→      <div class="wb-dialog-body">
+   230→   230→        <div class="wb-field">
+   231→   231→          <div class="wb-field-label">名称</div>
+   232→   232→          <input class="wb-input" id="wbn-name" maxlength="30" placeholder="例如：现代都市背景">
+   233→   233→        </div>
+   234→   234→        <div class="wb-field">
+   235→   235→          <div class="wb-field-label">范围</div>
+   236→   236→          <div class="segmented wb-seg" id="wbn-scope">
+   237→   237→            <button type="button" data-s="global" class="on">全局</button>
+   238→   238→            <button type="button" data-s="local">局部</button>
+   239→   239→            <button type="button" data-s="exclusive">专属</button>
+   240→   240→          </div>
+   241→   241→          <div class="wb-field-note" id="wbn-desc">${SCOPES.global.desc}</div>
+   242→   242→        </div>
+   243→   243→      </div>
+   244→   244→      <div class="wb-dialog-foot">
+   245→   245→        <button type="button" class="wb-btn ghost" data-cancel>取消</button>
+   246→   246→        <button type="button" class="wb-btn fill" data-ok>创建</button>
+   247→   247→      </div>`;
+   248→   248→    let scope = 'global';
+   249→   249→    mask.appendChild(d);
+   250→   250→    document.getElementById('screen').appendChild(mask);
+   251→   251→    const close = (val) => { mask.remove(); resolve(val); };
+   252→   252→    d.querySelector('.wb-dialog-x').onclick = () => close(null);
+   253→   253→    d.querySelector('[data-cancel]').onclick = () => close(null);
+   254→   254→    d.querySelector('[data-ok]').onclick = () => close({ name: d.querySelector('#wbn-name').value.trim(), scope });
+   255→   255→    d.querySelectorAll('#wbn-scope button').forEach(b => {
+   256→   256→      b.onclick = () => {
+   257→   257→        haptic(4);
+   258→   258→        scope = b.dataset.s;
+   259→   259→        d.querySelectorAll('#wbn-scope button').forEach(x => x.classList.toggle('on', x === b));
+   260→   260→        d.querySelector('#wbn-desc').textContent = SCOPES[scope].desc + '，' + SCOPES[scope].usage;
+   261→   261→      };
+   262→   262→    });
+   263→   263→    mask.addEventListener('click', (e) => { if (e.target === mask) close(null); });
+   264→   264→    const inp = d.querySelector('#wbn-name');
+   265→   265→    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') d.querySelector('[data-ok]').click(); });
+   266→   266→    setTimeout(() => inp.focus(), 90);
+   267→   267→  });
+   268→   268→}
+   269→   269→
+   270→   270→async function newBook() {
+   271→   271→  const r = await newBookDialog();
+   272→   272→  if (!r) return;
+   273→   273→  if (!r.name) { toast('请输入世界书名称'); return; }
+   274→   274→  const book = { id: uid('wb'), name: r.name, scope: r.scope, enabled: true, bound: [], createdAt: Date.now(), updatedAt: Date.now() };
+   275→   275→  await DB.put('worldbooks', book);
+   276→   276→  haptic(8);
+   277→   277→  toast('已创建「' + book.name + '」');
+   278→   278→  const body = root && root.querySelector('.page-body');
+   279→   279→  if (body && body.querySelector('#wb-list')) await loadBooks(body);
+   280→   280→  openBookEntries(book);
+   281→   281→}
+   282→   282→
+   283→   283→/* ============ 条目列表页（编辑世界书） ============ */
+   284→   284→function openBookEntries(book) {
+   285→   285→  const page = nav.makePage({
+   286→   286→    title: '世界书',
+   287→   287→    chevBack: true,
+   288→   288→    right: [navBtn(PLUS_SVG, () => openEntryEditor(book, null), 'pill-btn')],
+   289→   289→    async build(body, pageEl) {
+   290→   290→      body.classList.add('wb-body');
+   291→   291→      const scope = SCOPES[book.scope] || SCOPES.global;
+   292→   292→      body.innerHTML = `
+   293→   293→        <div class="wb-book-head">
+   294→   294→          <div class="wb-book-name ellipsis">${escapeHtml(book.name || '未命名')}</div>
+   295→   295→          <div class="wb-book-sub">${escapeHtml(scope.desc)}</div>
+   296→   296→        </div>
+   297→   297→        <div class="inset-group wb-fi-group">
+   298→   298→          <div class="inset-card">
+   299→   299→            <div class="row static">
+   300→   300→              <div class="row-icon wb-ri-scope">${SCOPE_SVG}</div>
+   301→   301→              <div class="row-label">范围</div>
+   302→   302→              <div class="row-val tappable" id="wbe-scope-val">${scope.label}</div>
+   303→   303→              <div class="row-chevron"></div>
+   304→   304→            </div>
+   305→   305→            <div class="row static">
+   306→   306→              <div class="row-icon wb-ri-doc">${DOC_SVG}</div>
+   307→   307→              <div class="row-label">启用</div>
+   308→   308→              <div class="switch ${book.enabled ? 'on' : ''}" id="wbe-enabled" role="switch" aria-label="启用世界书"></div>
+   309→   309→            </div>
+   310→   310→            ${book.scope === 'exclusive' ? `
+   311→   311→            <div class="row" id="wbe-bound-row">
+   312→   312→              <div class="row-icon wb-ri-link">${LINK_SVG}</div>
+   313→   313→              <div class="row-label">绑定角色</div>
+   314→   314→              <div class="row-val" id="wbe-bound-val"></div>
+   315→   315→              <div class="row-chevron"></div>
+   316→   316→            </div>` : ''}
+   317→   317→          </div>
+   318→   318→          <div class="wb-form-note">${escapeHtml(scope.usage)}</div>
+   319→   319→        </div>
+   320→   320→        <button class="wb-new-entry" id="wbe-new">＋ 新建条目</button>
+   321→   321→        <div id="wbe-list"></div>`;
+   322→   322→
+   323→   323→      /* 范围切换（弹选择） */
+   324→   324→      const scopeRow = body.querySelector('#wbe-scope-val').closest('.row');
+   325→   325→      scopeRow.addEventListener('click', async () => {
+   326→   326→        haptic(4);
+   327→   327→        const v = await actionSheet([
+   328→   328→          { text: `全局 — ${SCOPES.global.desc}`, value: 'global' },
+   329→   329→          { text: `局部 — ${SCOPES.local.desc}`, value: 'local' },
+   330→   330→          { text: `专属 — ${SCOPES.exclusive.desc}`, value: 'exclusive' },
+   331→   331→        ]);
+   332→   332→        if (!v || v === book.scope) return;
+   333→   333→        book.scope = v;
+   334→   334→        if (v !== 'exclusive') book.bound = [];
+   335→   335→        book.updatedAt = Date.now();
+   336→   336→        await DB.put('worldbooks', book);
+   337→   337→        toast('范围已改为' + SCOPES[v].label);
+   338→   338→        nav.pop();
+   339→   339→        openBookEntries(book);
+   340→   340→      });
+   341→   341→
+   342→   342→      /* 启用开关 */
+   343→   343→      const sw = body.querySelector('#wbe-enabled');
+   344→   344→      sw.addEventListener('click', async () => {
+   345→   345→        haptic(4);
+   346→   346→        book.enabled = !book.enabled;
+   347→   347→        book.updatedAt = Date.now();
+   348→   348→        await DB.put('worldbooks', book);
+   349→   349→        sw.classList.toggle('on', book.enabled);
+   350→   350→        const stat = pageEl.querySelector('.wb-book-sub');
+   351→   351→        if (stat) stat.textContent = (book.enabled ? '' : '（已停用，聊天时不注入）') + (SCOPES[book.scope] || SCOPES.global).desc;
+   352→   352→      });
+   353→   353→
+   354→   354→      /* 绑定角色（专属范围） */
+   355→   355→      const boundRow = body.querySelector('#wbe-bound-row');
+   356→   356→      if (boundRow) {
+   357→   357→        boundRow.addEventListener('click', () => { haptic(4); openBindPicker(book, pageEl); });
+   358→   358→      }
+   359→   359→
+   360→   360→      body.querySelector('#wbe-new').onclick = () => { haptic(4); openEntryEditor(book, null); };
+   361→   361→      await loadEntries(book, body);
+   362→   362→    },
+   363→   363→  });
+   364→   364→  nav.push(page);
+   365→   365→}
+   366→   366→
+   367→   367→/* 刷新当前条目列表页（取 DOM 中最后一个 #wbe-list：栈顶页优先，避开退场中的旧页） */
+   368→   368→async function refreshEntriesView(book) {
+   369→   369→  const lists = root ? root.querySelectorAll('#wbe-list') : [];
+   370→   370→  const listEl = lists.length ? lists[lists.length - 1] : null;
+   371→   371→  if (listEl) await loadEntries(book, listEl.closest('.page-body'));
+   372→   372→}
+   373→   373→
+   374→   374→async function loadEntries(book, body) {
+   375→   375→  const listEl = body.querySelector('#wbe-list');
+   376→   376→  if (!listEl) return;
+   377→   377→  const boundVal = body.querySelector('#wbe-bound-val');
+   378→   378→  if (boundVal) {
+   379→   379→    const names = Array.isArray(book.bound) ? book.bound.filter(Boolean) : [];
+   380→   380→    boundVal.textContent = names.length ? names.join('、') : '未绑定';
+   381→   381→    boundVal.classList.toggle('tappable', !names.length);
+   382→   382→  }
+   383→   383→  const entries = await DB.byIndex('wbentries', 'bookId', book.id);
+   384→   384→  entries.sort((a, b) => (b.priority || 0) - (a.priority || 0));
+   385→   385→
+   386→   386→  listEl.innerHTML = '';
+   387→   387→  if (!entries.length) {
+   388→   388→    listEl.innerHTML = `
+   389→   389→      <div class="empty-state">
+   390→   390→        ${DOC_SVG.replace('width="17" height="17"', 'width="46" height="46"')}
+   391→   391→        <div class="es-title">还没有条目</div>
+   392→   392→        <div>条目是发送给 AI 的世界观设定</div>
+   393→   393→      </div>`;
+   394→   394→    return;
+   395→   395→  }
+   396→   396→  entries.forEach(e => listEl.appendChild(entryCard(book, e)));
+   397→   397→}
+   398→   398→
+   399→   399→function entryCard(book, entry) {
+   400→   400→  const kws = Array.isArray(entry.keywords) ? entry.keywords.filter(Boolean) : [];
+   401→   401→  const card = el('div', 'wb-entry' + (entry.enabled ? '' : ' off'));
+   402→   402→  card.innerHTML = `
+   403→   403→    <div class="wb-entry-head">
+   404→   404→      <span class="wb-dot ${entry.enabled ? 'on' : ''}"></span>
+   405→   405→      <div class="wb-entry-name ellipsis">${escapeHtml(entry.name || '未命名条目')}</div>
+   406→   406→      <div class="wb-entry-pri">${entry.priority ?? 0}</div>
+   407→   407→      <button class="wb-entry-more" aria-label="更多操作">${MORE_SVG}</button>
+   408→   408→    </div>
+   409→   409→    <div class="wb-entry-meta">
+   410→   410→      <div class="ellipsis">关键词: ${kws.length ? escapeHtml(kws.join('、')) : '（无关键词，按书范围生效）'}</div>
+   411→   411→      <div>插入: ${entry.position === 'before' ? '角色定义之前' : '角色定义之后'} · 优先级: ${entry.priority ?? 0}</div>
+   412→   412→    </div>`;
+   413→   413→  card.addEventListener('click', (e) => {
+   414→   414→    if (e.target.closest('.wb-entry-more')) return;
+   415→   415→    haptic(4);
+   416→   416→    openEntryEditor(book, entry);
+   417→   417→  });
+   418→   418→  card.querySelector('.wb-entry-more').onclick = (e) => {
+   419→   419→    e.stopPropagation();
+   420→   420→    haptic(4);
+   421→   421→    entryMenu(book, entry);
+   422→   422→  };
+   423→   423→  return card;
+   424→   424→}
+   425→   425→
+   426→   426→async function entryMenu(book, entry) {
+   427→   427→  const v = await actionSheet([
+   428→   428→    { text: '编辑条目', value: 'edit' },
+   429→   429→    { text: entry.enabled ? '停用条目' : '启用条目', value: 'toggle' },
+   430→   430→    { text: '删除条目', value: 'del', danger: true },
+   431→   431→  ]);
+   432→   432→  if (!v) return;
+   433→   433→  if (v === 'edit') { openEntryEditor(book, entry); return; }
+   434→   434→  if (v === 'toggle') {
+   435→   435→    entry.enabled = !entry.enabled;
+   436→   436→    entry.updatedAt = Date.now();
+   437→   437→    book.updatedAt = Date.now();
+   438→   438→    await DB.put('wbentries', entry);
+   439→   439→    await DB.put('worldbooks', book);
+   440→   440→    toast(entry.enabled ? '条目已启用' : '条目已停用');
+   441→   441→  }
+   442→   442→  if (v === 'del') {
+   443→   443→    const ok = await confirmDialog('删除条目', `删除「${entry.name || '未命名条目'}」？`, { okText: '删除', danger: true });
+   444→   444→    if (!ok) return;
+   445→   445→    await DB.del('wbentries', entry.id);
+   446→   446→    book.updatedAt = Date.now();
+   447→   447→    await DB.put('worldbooks', book);
+   448→   448→    toast('已删除');
+   449→   449→  }
+   450→   450→  await refreshEntriesView(book);
+   451→   451→}
+   452→   452→
+   453→   453→/* ============ 绑定角色（专属范围：多选信息APP好友） ============ */
+   454→   454→function openBindPicker(book, pageEl) {
+   455→   455→  sheet({
+   456→   456→    title: '绑定角色',
+   457→   457→    build(body, close) {
+   458→   458→      body.classList.add('wb-bind-body');
+   459→   459→      const tip = el('div', 'wb-bind-tip');
+   460→   460→      tip.textContent = '专属世界书仅在与绑定角色的对话中生效';
+   461→   461→      body.appendChild(tip);
+   462→   462→      loadChatFriends().then(friends => {
+   463→   463→        if (!friends.length) {
+   464→   464→          const empty = el('div', 'wb-bind-empty');
+   465→   465→          empty.textContent = '还没有角色，去「信息」APP 添加好友后再来绑定';
+   466→   466→          body.appendChild(empty);
+   467→   467→          return;
+   468→   468→        }
+   469→   469→        friends.forEach(f => {
+   470→   470→          const on = (Array.isArray(book.bound) ? book.bound : []).includes(f.name);
+   471→   471→          const row = el('div', 'wb-bind-row' + (on ? ' on' : ''));
+   472→   472→          row.innerHTML = `<div class="wb-bind-check"></div><div class="wb-bind-name ellipsis">${escapeHtml(f.name)}</div>`;
+   473→   473→          row.onclick = () => {
+   474→   474→            haptic(4);
+   475→   475→            const list = Array.isArray(book.bound) ? book.bound : [];
+   476→   476→            const i = list.indexOf(f.name);
+   477→   477→            if (i >= 0) list.splice(i, 1); else list.push(f.name);
+   478→   478→            book.bound = list;
+   479→   479→            row.classList.toggle('on', list.includes(f.name));
+   480→   480→          };
+   481→   481→          body.appendChild(row);
+   482→   482→        });
+   483→   483→      });
+   484→   484→      const actions = el('div', 'sheet-actions');
+   485→   485→      actions.style.paddingTop = '12px';
+   486→   486→      const done = el('button', 'btn-fill');
+   487→   487→      done.type = 'button';
+   488→   488→      done.textContent = '完成';
+   489→   489→      done.onclick = () => close();
+   490→   490→      actions.appendChild(done);
+   491→   491→      body.appendChild(actions);
+   492→   492→    },
+   493→   493→    onClose: async () => {
+   494→   494→      book.updatedAt = Date.now();
+   495→   495→      await DB.put('worldbooks', book);
+   496→   496→      await refreshEntriesView(book);
+   497→   497→      toast('绑定已保存');
+   498→   498→    },
+   499→   499→  });
+   500→   500→}
+   501→   501→
+   502→   502→/* 读取「信息」APP 好友列表（ios-im 库 kv 表 im.friends，localStorage 兜底；同源可直读） */
+   503→   503→function loadChatFriends() {
+   504→   504→  const fromLS = () => {
+   505→   505→    try {
+   506→   506→      const raw = localStorage.getItem('im.friends');
+   507→   507→      const arr = raw ? JSON.parse(raw) : [];
+   508→   508→      return (Array.isArray(arr) ? arr : []).filter(f => f && f.name).map(f => ({ id: f.id, name: f.name }));
+   509→   509→    } catch (e) { return []; }
+   510→   510→  };
+   511→   511→  return new Promise((resolve) => {
+   512→   512→    let done = false;
+   513→   513→    const finish = (v) => { if (!done) { done = true; resolve(v); } };
+   514→   514→    try {
+   515→   515→      const req = indexedDB.open('ios-im');
+   516→   516→      req.onupgradeneeded = () => {
+   517→   517→        try { if (!req.result.objectStoreNames.contains('kv')) req.result.createObjectStore('kv'); } catch (e) { /* noop */ }
+   518→   518→      };
+   519→   519→      req.onsuccess = () => {
+   520→   520→        const db = req.result;
+   521→   521→        try {
+   522→   522→          const r = db.transaction('kv', 'readonly').objectStore('kv').get('im.friends');
+   523→   523→          r.onsuccess = () => {
+   524→   524→            const arr = Array.isArray(r.result) ? r.result : null;
+   525→   525→            const list = (arr || []).filter(f => f && f.name).map(f => ({ id: f.id, name: f.name }));
+   526→   526→            finish(list.length ? list : fromLS());
+   527→   527→          };
+   528→   528→          r.onerror = () => finish(fromLS());
+   529→   529→        } catch (e) { finish(fromLS()); }
+   530→   530→      };
+   531→   531→      req.onerror = () => finish(fromLS());
+   532→   532→      setTimeout(() => finish(fromLS()), 1500); /* 兜底超时 */
+   533→   533→    } catch (e) { finish(fromLS()); }
+   534→   534→  });
+   535→   535→}
+   536→   536→
+   537→   537→/* ============ 新建 / 编辑条目 ============ */
+   538→   538→function openEntryEditor(book, entry) {
+   539→   539→  const isNew = !entry;
+   540→   540→  const data = entry || {
+   541→   541→    id: uid('wbe'), bookId: book.id, name: '', enabled: true,
+   542→   542→    position: 'after', keywords: [], priority: 100, content: '', updatedAt: Date.now(),
+   543→   543→  };
+   544→   544→
+   545→   545→  const page = nav.makePage({
+   546→   546→    title: isNew ? '新建条目' : '编辑条目',
+   547→   547→    chevBack: true,
+   548→   548→    /* 保存函数在 build 内赋值到 page._save（build 作用域） */
+   549→   549→    right: [navBtn('<span class="wb-save-btn">保存</span>', () => page._save && page._save(), 'pill-btn pill-text')],
+   550→   550→    build(body, pageEl) {
+   551→   551→      body.classList.add('wb-body', 'wb-editor-body');
+   552→   552→      body.innerHTML = `
+   553→   553→        <div class="inset-group wb-fi-group">
+   554→   554→          <div class="inset-card">
+   555→   555→            <div class="row static">
+   556→   556→              <div class="row-label">启用</div>
+   557→   557→              <div class="switch ${data.enabled ? 'on' : ''}" id="wbe-en" role="switch" aria-label="启用条目"></div>
+   558→   558→            </div>
+   559→   559→            <div class="wb-form-col">
+   560→   560→              <div class="wb-form-label">条目名称</div>
+   561→   561→              <input class="wb-input" id="wbe-name" maxlength="30" placeholder="例如：城市设定" value="${escapeAttr(data.name || '')}">
+   562→   562→            </div>
+   563→   563→          </div>
+   564→   564→          <div class="wb-form-note">条目名称不会发送给AI，仅用于管理</div>
+   565→   565→        </div>
+   566→   566→
+   567→   567→        <div class="inset-group wb-fi-group">
+   568→   568→          <div class="wb-form-label">插入位置</div>
+   569→   569→          <div class="segmented wb-seg" id="wbe-pos">
+   570→   570→            <button type="button" data-p="before" class="${data.position === 'before' ? 'on' : ''}">角色定义之前</button>
+   571→   571→            <button type="button" data-p="after" class="${data.position !== 'before' ? 'on' : ''}">角色定义之后</button>
+   572→   572→          </div>
+   573→   573→        </div>
+   574→   574→
+   575→   575→        <div class="inset-group wb-fi-group">
+   576→   576→          <div class="wb-form-label">关键词</div>
+   577→   577→          <div class="inset-card">
+   578→   578→            <input class="wb-input wb-kw-input" id="wbe-kw" placeholder="上海, 北京, 深圳" value="${escapeAttr((data.keywords || []).join(', '))}">
+   579→   579→          </div>
+   580→   580→          <div class="wb-form-note">用逗号分隔，命中任意关键词即触发该条目</div>
+   581→   581→        </div>
+   582→   582→
+   583→   583→        <div class="inset-group wb-fi-group">
+   584→   584→          <div class="wb-form-label">优先级</div>
+   585→   585→          <div class="inset-card">
+   586→   586→            <input class="wb-input wb-pri-input" id="wbe-pri" type="number" inputmode="numeric" min="0" max="9999" step="1" value="${Number(data.priority ?? 0)}">
+   587→   587→          </div>
+   588→   588→          <div class="wb-form-note">数字越大越优先</div>
+   589→   589→        </div>
+   590→   590→
+   591→   591→        <div class="inset-group wb-fi-group">
+   592→   592→          <div class="wb-form-label">正文内容</div>
+   593→   593→          <div class="inset-card">
+   594→   594→            <textarea class="wb-textarea" id="wbe-content" placeholder="命中后发送给AI的设定内容…">${escapeHtml(data.content || '')}</textarea>
+   595→   595→          </div>
+   596→   596→          <div class="wb-form-note">命中后该内容将插入 System Prompt${(SCOPES[book.scope] || SCOPES.global).label === '全局' ? '' : '（' + (SCOPES[book.scope] || SCOPES.global).label + '范围按关键词触发）'}</div>
+   597→   597→        </div>
+   598→   598→
+   599→   599→        ${isNew ? '' : `
+   600→   600→        <div class="inset-group wb-fi-group">
+   601→   601→          <div class="inset-card">
+   602→   602→            <div class="row danger" id="wbe-del">删除条目</div>
+   603→   603→          </div>
+   604→   604→        </div>`}`;
+   605→   605→
+   606→   606→      let position = data.position === 'before' ? 'before' : 'after';
+   607→   607→      body.querySelector('#wbe-en').addEventListener('click', function () {
+   608→   608→        haptic(4);
+   609→   609→        data.enabled = !data.enabled;
+   610→   610→        this.classList.toggle('on', data.enabled);
+   611→   611→      });
+   612→   612→      body.querySelectorAll('#wbe-pos button').forEach(b => {
+   613→   613→        b.onclick = () => {
+   614→   614→          haptic(4);
+   615→   615→          position = b.dataset.p;
+   616→   616→          body.querySelectorAll('#wbe-pos button').forEach(x => x.classList.toggle('on', x === b));
+   617→   617→        };
+   618→   618→      });
+   619→   619→
+   620→   620→      const doSave = async () => {
+   621→   621→        const name = body.querySelector('#wbe-name').value.trim();
+   622→   622→        const content = body.querySelector('#wbe-content').value.trim();
+   623→   623→        if (!name) { toast('请输入条目名称'); return; }
+   624→   624→        if (!content) { toast('请输入正文内容'); return; }
+   625→   625→        const kws = body.querySelector('#wbe-kw').value
+   626→   626→          .split(/[,，、\n]/)
+   627→   627→          .map(k => k.trim())
+   628→   628→          .filter(Boolean);
+   629→   629→        let pri = parseInt(body.querySelector('#wbe-pri').value, 10);
+   630→   630→        if (!Number.isFinite(pri) || pri < 0) pri = 0;
+   631→   631→        if (pri > 9999) pri = 9999;
+   632→   632→        data.name = name;
+   633→   633→        data.content = content;
+   634→   634→        data.keywords = kws;
+   635→   635→        data.priority = pri;
+   636→   636→        data.position = position;
+   637→   637→        data.enabled = body.querySelector('#wbe-en').classList.contains('on');
+   638→   638→        data.updatedAt = Date.now();
+   639→   639→        await DB.put('wbentries', data);
+   640→   640→        book.updatedAt = Date.now();
+   641→   641→        await DB.put('worldbooks', book);
+   642→   642→        haptic(8);
+   643→   643→        toast(isNew ? '条目已创建' : '条目已保存');
+   644→   644→        nav.pop();
+   645→   645→        await refreshEntriesView(book);
+   646→   646→      };
+   647→   647→      page._save = doSave;
+   648→   648→
+   649→   649→      if (!isNew) {
+   650→   650→        body.querySelector('#wbe-del').onclick = async () => {
+   651→   651→          haptic(4);
+   652→   652→          const ok = await confirmDialog('删除条目', `删除「${data.name || '未命名条目'}」？`, { okText: '删除', danger: true });
+   653→   653→          if (!ok) return;
+   654→   654→          await DB.del('wbentries', data.id);
+   655→   655→          book.updatedAt = Date.now();
+   656→   656→          await DB.put('worldbooks', book);
+   657→   657→          toast('已删除');
+   658→   658→          nav.pop();
+   659→   659→          await refreshEntriesView(book);
+   660→   660→        };
+   661→   661→      }
+   662→   662→    },
+   663→   663→  });
+   664→   664→  nav.push(page);
+   665→   665→}
+   666→   666→

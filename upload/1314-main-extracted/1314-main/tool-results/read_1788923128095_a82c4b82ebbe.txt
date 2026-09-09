@@ -1,0 +1,837 @@
+     1→import { useEffect, useRef, useState } from 'react'
+     2→import Messages from './pages/Messages'
+     3→import Contacts from './pages/Contacts'
+     4→import Discover from './pages/Discover'
+     5→import Me from './pages/Me'
+     6→import AddFriend from './pages/AddFriend'
+     7→import AddPersona from './pages/AddPersona'
+     8→import Chat from './pages/Chat'
+     9→import FriendDetail from './pages/FriendDetail'
+    10→import Moments from './pages/Moments'
+    11→import MyProfile from './pages/MyProfile'
+    12→import Settings from './pages/Settings'
+    13→import ApiSettingPage from './pages/ApiSettingPage'
+    14→import VisionApiPage from './pages/VisionApiPage'
+    15→import VoiceApiPage from './pages/VoiceApiPage'
+    16→import MemoryPage from './pages/MemoryPage'
+    17→import ChatSettings from './pages/ChatSettings'
+    18→import ChatSearch from './pages/ChatSearch'
+    19→import ChatBackground from './pages/ChatBackground'
+    20→import TranslateLang from './pages/TranslateLang'
+    21→import StickerPage from './pages/StickerPage'
+    22→import LocationPage from './pages/LocationPage'
+    23→import WalletHome from './pages/wallet/WalletHome'
+    24→import Change from './pages/wallet/Change'
+    25→import ChangeFund from './pages/wallet/ChangeFund'
+    26→import PayCode from './pages/wallet/PayCode'
+    27→import ReceiveCode from './pages/wallet/ReceiveCode'
+    28→import Scan from './pages/wallet/Scan'
+    29→import Bills, { BillDetail } from './pages/wallet/Bills'
+    30→import type { BillFilter } from './pages/wallet/Bills'
+    31→import RedPacket, { RedPacketRecords } from './pages/wallet/RedPacket'
+    32→import Transfer from './pages/wallet/Transfer'
+    33→import RelativeGift from './pages/wallet/RelativeGift'
+    34→import RelativeCardPage from './pages/wallet/RelativeCard'
+    35→import { RedPacketDetail, TransferDetail, RelativeCardDetail } from './pages/wallet/WalletDetail'
+    36→import BankCards from './pages/wallet/BankCards'
+    37→import { ChatIcon, ContactsIcon, DiscoverIcon, MeIcon } from './components/icons'
+    38→import { formatMoney } from './utils/qr'
+    39→import { checkAmount, deduct, payLabel } from './utils/pay'
+    40→import PaySuccess from './pages/wallet/PaySuccess'
+    41→import type { PaySuccessData } from './pages/wallet/PaySuccess'
+    42→import PayPasswordSet from './pages/wallet/PayPasswordSet'
+    43→import { addBill, appendMessage, loadBills, loadFriends, loadMessages, loadUiState, loadWallet, patchFriendMsg, saveFriends, saveMessages, saveUiState, updateWallet, uid } from './store'
+    44→import type { Friend, Message, RelativeCard } from './types'
+    45→
+    46→type Tab = 'messages' | 'contacts' | 'discover' | 'me'
+    47→type View =
+    48→  | { name: 'tabs' }
+    49→  | { name: 'addFriend'; friendId?: string }
+    50→  | { name: 'chat'; friendId: string; jumpTo?: string }
+    51→  | { name: 'friendDetail'; friendId: string }
+    52→  | { name: 'moments' }
+    53→  | { name: 'myProfile' }
+    54→  | { name: 'addPersona'; personaId?: string }
+    55→  | { name: 'settings' }
+    56→  | { name: 'apiSetting' }
+    57→  | { name: 'visionApi' }
+    58→  | { name: 'voiceApi' }
+    59→  | { name: 'memory'; friendId?: string }
+    60→  | { name: 'chatSettings'; friendId: string }
+    61→  | { name: 'chatSearch'; friendId: string }
+    62→  | { name: 'chatBg'; friendId: string }
+    63→  | { name: 'translateLang'; friendId: string }
+    64→  | { name: 'stickers' }
+    65→  | { name: 'location'; friendId: string }
+    66→  | { name: 'wallet' }
+    67→  | { name: 'walletChange' }
+    68→  | { name: 'walletFund' }
+    69→  | { name: 'payCode' }
+    70→  | { name: 'receiveCode' }
+    71→  | { name: 'scan' }
+    72→  | { name: 'bills'; filter?: BillFilter }
+    73→  | { name: 'billDetail'; billId: string }
+    74→  | { name: 'redPacket'; friendId?: string; fromChat?: boolean }
+    75→  | { name: 'redPacketRecords' }
+    76→  | { name: 'transfer'; friendId?: string; fromChat?: boolean }
+    77→  | { name: 'relativeCard' }
+    78→  | { name: 'relativeGift'; friendId?: string; fromChat?: boolean }
+    79→  | { name: 'rpDetail'; friendId: string; msgId: string }
+    80→  | { name: 'tfDetail'; friendId: string; msgId: string }
+    81→  | { name: 'relativeCardDetail'; cardId: string; friendId?: string; fromChat?: boolean }
+    82→  | { name: 'payPwd' }
+    83→  | { name: 'paySuccess'; data: PaySuccessData }
+    84→  | { name: 'bankcards' }
+    85→
+    86→const WALLET_VIEWS = ['wallet', 'walletChange', 'walletFund', 'payCode', 'receiveCode', 'scan', 'bills', 'redPacket', 'redPacketRecords', 'transfer', 'relativeCard', 'relativeGift', 'rpDetail', 'tfDetail', 'relativeCardDetail', 'bankcards', 'payPwd', 'paySuccess']
+    87→
+    88→const TABS: { key: Tab; label: string; icon: (active: boolean) => JSX.Element }[] = [
+    89→  { key: 'messages', label: '信息', icon: (a) => <ChatIcon active={a} /> },
+    90→  { key: 'contacts', label: '联系人', icon: (a) => <ContactsIcon active={a} /> },
+    91→  { key: 'discover', label: '发现', icon: (a) => <DiscoverIcon active={a} /> },
+    92→  { key: 'me', label: '我', icon: (a) => <MeIcon active={a} /> },
+    93→]
+    94→
+    95→function initialState(): { tab: Tab; view: View } {
+    96→  const saved = loadUiState<{ tab?: Tab; view?: View }>({})
+    97→  const tab: Tab = TABS.some((t) => t.key === saved.tab) ? (saved.tab as Tab) : 'messages'
+    98→  const savedView = saved.view as View | undefined
+    99→  let view: View = { name: 'tabs' }
+   100→  if (savedView && typeof savedView.name === 'string') {
+   101→    if (savedView.name === 'chat') {
+   102→      view = loadFriends().some((f) => f.id === savedView.friendId) ? savedView : { name: 'tabs' }
+   103→    } else if (savedView.name === 'stickers') {
+   104→      view = savedView
+   105→    } else if (savedView.name === 'billDetail') {
+   106→      view = loadBills().some((b) => b.id === (savedView as { billId: string }).billId) ? savedView : { name: 'tabs' }
+   107→    } else if (savedView.name === 'redPacket' || savedView.name === 'transfer') {
+   108→      view = savedView.friendId && loadFriends().some((f) => f.id === savedView.friendId) ? savedView : { name: 'tabs' }
+   109→    } else if (WALLET_VIEWS.includes(savedView.name)) {
+   110→      view = savedView
+   111→    } else if (
+   112→      ['moments', 'myProfile', 'settings', 'apiSetting', 'visionApi', 'voiceApi', 'memory', 'chatSettings', 'chatSearch', 'chatBg', 'translateLang'].includes(
+   113→        savedView.name
+   114→      ) &&
+   115→      loadFriends().some((f) => f.id === (savedView as { friendId: string }).friendId)
+   116→    ) {
+   117→      view = savedView
+   118→    }
+   119→  }
+   120→  return { tab, view }
+   121→}
+   122→
+   123→function AppView() {
+   124→  const [init] = useState(initialState)
+   125→  const [friends, setFriends] = useState<Friend[]>(() => loadFriends())
+   126→  const [messages, setMessages] = useState<Message[]>(() => loadMessages())
+   127→  const [tab, setTab] = useState<Tab>(init.tab)
+   128→  const [view, setView] = useState<View>(init.view)
+   129→  const [pendingLocation, setPendingLocation] = useState<{ name: string; address?: string } | null>(null)
+   130→
+   131→  /* 壳层内嵌（iPhone 桌面打开）：页面内返回键隐藏，由壳层全局返回键统一接管 */
+   132→  const [embedded] = useState(() => {
+   133→    try {
+   134→      return window.parent !== window && typeof (window.parent as Window).__closeApp === 'function'
+   135→    } catch {
+   136→      return false
+   137→    }
+   138→  })
+   139→
+   140→  /* 底部上滑手势（仅壳层内嵌时生效）：在屏幕底部 Home 区上滑 → 上报壳层打开多任务切换器，
+   141→     与壳层里其他原生 App 的上滑唤起切换器体验保持一致（iframe 内手势无法冒泡到壳层页面）
+   142→     判定策略：以轨迹最高点（minY）衡量上滑进度，只在其明显回落时才判定为列表滚动而取消，
+   143→     避免起手抖动、慢速滑动被误杀 */
+   144→  useEffect(() => {
+   145→    if (!embedded) return
+   146→    const EDGE = 84 // 底部起手区高度
+   147→    const MIN_UP = 24 // 有效上滑位移（相对轨迹最高点）
+   148→    const BACK_GIVE = 30 // 冲高后回落超过该值 → 视为向下滑动，放弃
+   149→    const MAX_DX = 110 // 允许的横向偏移
+   150→    const MAX_MS = 1100 // 手势时间窗
+   151→    let sx = 0
+   152→    let sy = 0
+   153→    let minY = 0
+   154→    let st = 0
+   155→    let tracking = false
+   156→    let fired = false
+   157→
+   158→    const begin = (x: number, y: number, t: number) => {
+   159→      if (fired) return
+   160→      if (y < window.innerHeight - EDGE) return
+   161→      tracking = true
+   162→      sx = x
+   163→      sy = y
+   164→      minY = y
+   165→      st = t
+   166→    }
+   167→    const move = (x: number, y: number, t: number) => {
+   168→      if (!tracking || fired) return
+   169→      if (y < minY) minY = y
+   170→      if (y - minY > BACK_GIVE) {
+   171→        tracking = false
+   172→        return
+   173→      }
+   174→      const dx = Math.abs(x - sx)
+   175→      if (sy - minY > MIN_UP && dx < MAX_DX && t - st < MAX_MS) {
+   176→        fired = true
+   177→        tracking = false
+   178→        try {
+   179→          window.parent.postMessage({ type: 'ios-open-switcher' }, window.location.origin)
+   180→        } catch {
+   181→          /* 跨域忽略 */
+   182→        }
+   183→        window.setTimeout(() => {
+   184→          fired = false
+   185→        }, 200)
+   186→      }
+   187→    }
+   188→    const end = () => {
+   189→      tracking = false
+   190→    }
+   191→
+   192→    const onPd = (e: PointerEvent) => {
+   193→      if (e.isPrimary) begin(e.clientX, e.clientY, e.timeStamp)
+   194→    }
+   195→    const onPm = (e: PointerEvent) => {
+   196→      if (e.isPrimary) move(e.clientX, e.clientY, e.timeStamp)
+   197→    }
+   198→    const onPu = () => end()
+   199→
+   200→    window.addEventListener('pointerdown', onPd)
+   201→    window.addEventListener('pointermove', onPm)
+   202→    window.addEventListener('pointerup', onPu)
+   203→    window.addEventListener('pointercancel', onPu)
+   204→    return () => {
+   205→      window.removeEventListener('pointerdown', onPd)
+   206→      window.removeEventListener('pointermove', onPm)
+   207→      window.removeEventListener('pointerup', onPu)
+   208→      window.removeEventListener('pointercancel', onPu)
+   209→    }
+   210→  }, [embedded])
+   211→
+   212→  /* 视图历史栈：壳层返回键逐级回退；显式 onBack 与栈自动对齐（目标===栈顶时弹栈） */
+   213→  const viewStack = useRef<View[]>([])
+   214→  const skipStack = useRef(false)
+   215→  const lastView = useRef<View>(init.view)
+   216→
+   217→  const sameView = (a: View, b: View) => JSON.stringify(a) === JSON.stringify(b)
+   218→
+   219→  useEffect(() => {
+   220→    const prev = lastView.current
+   221→    lastView.current = view
+   222→    if (skipStack.current) {
+   223→      skipStack.current = false
+   224→      return
+   225→    }
+   226→    if (sameView(prev, view)) return
+   227→    const top = viewStack.current[viewStack.current.length - 1]
+   228→    if (top && sameView(top, view)) viewStack.current.pop()
+   229→    else if (prev.name !== 'paySuccess') viewStack.current.push(prev)
+   230→  }, [view])
+   231→
+   232→  const navBack = (): boolean => {
+   233→    if (view.name === 'tabs') return false
+   234→    const prev = viewStack.current.pop()
+   235→    skipStack.current = true
+   236→    refreshData()
+   237→    setView(prev ?? { name: 'tabs' })
+   238→    return true
+   239→  }
+   240→
+   241→  /* 桥接给壳层返回键（同源 iframe 调用）：处理了内部导航返回 true，根页面返回 false → 关闭应用 */
+   242→  useEffect(() => {
+   243→    (window as unknown as { __navBack?: () => boolean }).__navBack = navBack
+   244→  })
+   245→
+   246→  /* 深色顶部的页面：通知壳层状态栏用白色图标（其余页面顶部为浅色） */
+   247→  const sbDark = ['scan', 'payCode', 'receiveCode', 'moments'].includes(view.name)
+   248→  useEffect(() => {
+   249→    try {
+   250→      if (window.parent !== window) {
+   251→        window.parent.postMessage({ type: 'ios-sb-style', dark: sbDark }, window.location.origin)
+   252→      }
+   253→    } catch {
+   254→      /* 跨域忽略 */
+   255→    }
+   256→  }, [sbDark])
+   257→
+   258→  useEffect(() => {
+   259→    saveUiState({ tab, view })
+   260→  }, [tab, view])
+   261→
+   262→  const refreshData = () => {
+   263→    setFriends(loadFriends())
+   264→    setMessages(loadMessages())
+   265→  }
+   266→
+   267→  const openChat = (friendId: string) => {
+   268→    if (!friendId) return
+   269→    setView({ name: 'chat', friendId })
+   270→  }
+   271→
+   272→  const backToTabs = () => {
+   273→    refreshData()
+   274→    setView({ name: 'tabs' })
+   275→  }
+   276→
+   277→  const onFriendCreated = (friendId: string) => {
+   278→    refreshData()
+   279→    if (view.name === 'addFriend' && view.friendId) {
+   280→      setView({ name: 'chat', friendId: view.friendId })
+   281→    } else {
+   282→      setView({ name: 'chat', friendId })
+   283→    }
+   284→  }
+   285→
+   286→  const scheduleAIReceive = (friendId: string, msgId: string, kind: 'redpacket' | 'transfer' | 'rc') => {
+   287→    window.setTimeout(() => {
+   288→      const friend = loadFriends().find((f) => f.id === friendId)
+   289→      const msg = loadMessages().find((m) => m.id === msgId)
+   290→      if (!friend || !msg) return
+   291→      const claim = Math.random() < 0.6
+   292→      if (kind === 'redpacket' && msg.redpacket) {
+   293→        if (claim) {
+   294→          patchFriendMsg(friendId, msgId, { redpacket: { ...msg.redpacket, status: '已领取', openedBy: friend.name, openedAt: Date.now() } })
+   295→          appendMessage({ id: uid(), friendId, from: 'friend', text: `领取了你的红包，收到 ¥${msg.redpacket.amount} 元`, time: Date.now(), receipt: { kind: 'redpacket', amount: msg.redpacket.amount, srcMsgId: msgId } })
+   296→        } else {
+   297→          patchFriendMsg(friendId, msgId, { redpacket: { ...msg.redpacket, status: '已退还' } })
+   298→          const amt = msg.redpacket.amount
+   299→          updateWallet((x) => ({ ...x, balance: Math.round((x.balance + amt) * 100) / 100 }))
+   300→          addBill({ kind: '红包', title: `${friend.name}退还的红包`, amount: amt, status: '已退还，退回零钱', friendName: friend.name, note: msg.redpacket.blessing })
+   301→          appendMessage({ id: uid(), friendId, from: 'friend', text: `退还了你的红包，¥${amt} 已退回你的零钱`, time: Date.now() })
+   302→        }
+   303→        friend.lastTime = Date.now()
+   304→        saveFriends(loadFriends().map((f) => (f.id === friendId ? friend : f)))
+   305→        refreshData()
+   306→      } else if (kind === 'transfer' && msg.transfer) {
+   307→        if (claim) {
+   308→          patchFriendMsg(friendId, msgId, { transfer: { ...msg.transfer, status: '已收款', confirmedAt: Date.now() } })
+   309→          appendMessage({ id: uid(), friendId, from: 'friend', text: `已收款，到账 ¥${msg.transfer.amount} 元`, time: Date.now(), receipt: { kind: 'transfer', amount: msg.transfer.amount, srcMsgId: msgId } })
+   310→        } else {
+   311→          patchFriendMsg(friendId, msgId, { transfer: { ...msg.transfer, status: '已退还' } })
+   312→          const amt = msg.transfer.amount
+   313→          updateWallet((x) => ({ ...x, balance: Math.round((x.balance + amt) * 100) / 100 }))
+   314→          addBill({ kind: '转账', title: `${friend.name}退还的转账`, amount: amt, status: '已退还，退回零钱', friendName: friend.name, note: msg.transfer.note })
+   315→          appendMessage({ id: uid(), friendId, from: 'friend', text: `退还了你的转账，¥${amt} 已退回你的零钱`, time: Date.now() })
+   316→        }
+   317→        friend.lastTime = Date.now()
+   318→        saveFriends(loadFriends().map((f) => (f.id === friendId ? friend : f)))
+   319→        refreshData()
+   320→      } else if (kind === 'rc' && msg.relativeCard) {
+   321→        const card = loadWallet().relativeCards.find((c) => c.id === msg.relativeCard!.cardId)
+   322→        if (!card) return
+   323→        if (claim) {
+   324→          updateWallet((x) => ({ ...x, relativeCards: x.relativeCards.map((c2) => (c2.id === card.id ? { ...c2, status: 'claimed', claimedAt: Date.now() } : c2)) }))
+   325→          patchFriendMsg(friendId, msgId, { relativeCard: { cardId: card.id, status: '已领取' } })
+   326→          appendMessage({ id: uid(), friendId, from: 'friend', text: `已领取你的亲属卡，每月额度 ¥${card.monthlyLimit} 元`, time: Date.now(), receipt: { kind: 'rc', amount: card.monthlyLimit, srcMsgId: msgId, cardId: card.id } })
+   327→        } else {
+   328→          updateWallet((x) => ({ ...x, relativeCards: x.relativeCards.map((c2) => (c2.id === card.id ? { ...c2, status: 'rejected', rejectedAt: Date.now() } : c2)) }))
+   329→          patchFriendMsg(friendId, msgId, { relativeCard: { cardId: card.id, status: '已退还' } })
+   330→          appendMessage({ id: uid(), friendId, from: 'friend', text: `婉拒了你的亲属卡，卡已退回给你`, time: Date.now() })
+   331→        }
+   332→        friend.lastTime = Date.now()
+   333→        saveFriends(loadFriends().map((f) => (f.id === friendId ? friend : f)))
+   334→        refreshData()
+   335→      }
+   336→    }, 4000 + Math.random() * 5000)
+   337→  }
+   338→
+   339→  const verifyPwd = (pwd: string | null): string | null => {
+   340→    const w = loadWallet()
+   341→    if (!w.payPassword) return null
+   342→    if (pwd === null) return '请输入支付密码'
+   343→    return pwd === w.payPassword ? null : '支付密码错误，请重试'
+   344→  }
+   345→
+   346→  const submitRedPacket = (friendId: string, amount: number, blessing: string, payId: string, pwd: string | null): string | null => {
+   347→    const friend = loadFriends().find((f) => f.id === friendId)
+   348→    if (!friend) return '好友不存在'
+   349→    const n = Math.round(amount * 100) / 100
+   350→    if (!n || n <= 0 || n > 200) return '单个红包金额不可超过 200 元'
+   351→    const w = loadWallet()
+   352→    const a = checkAmount(w, payId, n)
+   353→    if (a) return a
+   354→    const v = verifyPwd(pwd)
+   355→    if (v) return v
+   356→    const label = payLabel(w, payId)
+   357→    updateWallet((x) => deduct(x, payId, n))
+   358→    addBill({ kind: '红包', title: `发给${friend.name}的红包`, amount: -n, status: '已发出，等待领取', friendName: friend.name, note: blessing })
+   359→    const msg: Message = { id: uid(), friendId, from: 'me', text: `[红包:${blessing}|${n}]`, time: Date.now(), redpacket: { amount: n, blessing, status: '待领取' } }
+   360→    appendMessage(msg)
+   361→    refreshData()
+   362→    scheduleAIReceive(friendId, msg.id, 'redpacket')
+   363→    setView({
+   364→      name: 'paySuccess',
+   365→      data: {
+   366→        title: '红包已发出',
+   367→        amount: n,
+   368→        rows: [
+   369→          { label: '收款人', value: friend.name },
+   370→          { label: '祝福语', value: blessing || '恭喜发财，大吉大利' },
+   371→          { label: '支付方式', value: label },
+   372→        ],
+   373→        back: { name: 'chat', friendId },
+   374→      },
+   375→    })
+   376→    return null
+   377→  }
+   378→
+   379→  const submitTransfer = (friendId: string, amount: number, note: string, payId: string, pwd: string | null): string | null => {
+   380→    const friend = loadFriends().find((f) => f.id === friendId)
+   381→    if (!friend) return '好友不存在'
+   382→    const n = Math.round(amount * 100) / 100
+   383→    if (!n || n <= 0) return '请输入转账金额'
+   384→    const w = loadWallet()
+   385→    const a = checkAmount(w, payId, n)
+   386→    if (a) return a
+   387→    const v = verifyPwd(pwd)
+   388→    if (v) return v
+   389→    const label = payLabel(w, payId)
+   390→    updateWallet((x) => deduct(x, payId, n))
+   391→    addBill({ kind: '转账', title: `转账给${friend.name}`, amount: -n, status: '已转账，待对方收款', friendName: friend.name, note: note || '转账' })
+   392→    const msg: Message = { id: uid(), friendId, from: 'me', text: `[转账:${n}|${note}]`, time: Date.now(), transfer: { amount: n, note, status: '待收款' } }
+   393→    appendMessage(msg)
+   394→    refreshData()
+   395→    scheduleAIReceive(friendId, msg.id, 'transfer')
+   396→    setView({
+   397→      name: 'paySuccess',
+   398→      data: {
+   399→        title: '转账成功',
+   400→        amount: n,
+   401→        rows: [
+   402→          { label: '收款人', value: friend.name },
+   403→          { label: '转账说明', value: note.trim() || '转账' },
+   404→          { label: '支付方式', value: label },
+   405→        ],
+   406→        back: { name: 'chat', friendId },
+   407→      },
+   408→    })
+   409→    return null
+   410→  }
+   411→
+   412→  const submitGift = (friendId: string, limit: number, payId: string, pwd: string | null): string | null => {
+   413→    const friend = loadFriends().find((f) => f.id === friendId)
+   414→    if (!friend) return '好友不存在'
+   415→    const n = Math.round(limit * 100) / 100
+   416→    if (!n || n <= 0 || n > 3000) return '每月消费上限需在 0.01 - 3000 元之间'
+   417→    const v = verifyPwd(pwd)
+   418→    if (v) return v
+   419→    const w = loadWallet()
+   420→    const label = payLabel(w, payId)
+   421→    const card: RelativeCard = { id: uid(), friendId: friend.id, friendName: friend.name, monthlyLimit: n, used: 0, direction: 'given', status: 'pending', createdAt: Date.now() }
+   422→    updateWallet((x) => ({ ...x, relativeCards: [...x.relativeCards, card] }))
+   423→    addBill({ kind: '亲属卡', title: `赠送亲属卡 · ${friend.name}`, amount: 0, status: '已赠送', note: `每月消费上限 ¥${formatMoney(n)}` })
+   424→    const msg: Message = { id: uid(), friendId: friend.id, from: 'me', text: `赠送给${friend.name}的亲属卡`, time: Date.now(), relativeCard: { cardId: card.id, status: '待领取' } }
+   425→    appendMessage(msg)
+   426→    refreshData()
+   427→    scheduleAIReceive(friend.id, msg.id, 'rc')
+   428→    setView({
+   429→      name: 'paySuccess',
+   430→      data: {
+   431→        title: '亲属卡已赠送',
+   432→        amount: n,
+   433→        amountNote: '每月消费上限',
+   434→        rows: [
+   435→          { label: '赠送对象', value: friend.name },
+   436→          { label: '代付账户', value: label },
+   437→          { label: '状态', value: '待对方领取' },
+   438→        ],
+   439→        back: { name: 'chat', friendId: friend.id },
+   440→      },
+   441→    })
+   442→    return null
+   443→  }
+   444→
+   445→  const submitSpend = (cardId: string, amount: number, note: string, payId: string, pwd: string | null): string | null => {
+   446→    const w = loadWallet()
+   447→    const card = w.relativeCards.find((c) => c.id === cardId)
+   448→    if (!card) return '亲属卡不存在'
+   449→    if (card.status === 'rejected') return '该亲属卡已退还，无法使用'
+   450→    if (card.direction === 'received' && card.status !== 'claimed') return '请先领用该亲属卡'
+   451→    const n = Math.round(amount * 100) / 100
+   452→    if (!n || n <= 0) return '请输入正确的金额'
+   453→    const rest = Math.round((card.monthlyLimit - card.used) * 100) / 100
+   454→    if (n > rest) return '超过本卡当月剩余额度'
+   455→    const v = verifyPwd(pwd)
+   456→    if (v) return v
+   457→    if (card.direction === 'received') {
+   458→      updateWallet((x) => ({
+   459→        ...x,
+   460→        relativeCards: x.relativeCards.map((c) => (c.id === cardId ? { ...c, used: Math.round((c.used + n) * 100) / 100 } : c)),
+   461→      }))
+   462→      addBill({ kind: '亲属卡', title: `${card.friendName} 的亲属卡消费`, amount: 0, status: `由${card.friendName}代付`, friendName: card.friendName, note: note.trim() || '亲属卡消费' })
+   463→      setView({
+   464→        name: 'paySuccess',
+   465→        data: {
+   466→          title: '支付成功',
+   467→          amount: n,
+   468→          rows: [
+   469→            { label: '消费项目', value: `${card.friendName} 的亲属卡` },
+   470→            { label: '代付人', value: card.friendName },
+   471→          ],
+   472→          back: { name: 'relativeCard' },
+   473→        },
+   474→      })
+   475→      return null
+   476→    }
+   477→    const a = checkAmount(w, payId, n)
+   478→    if (a) return a
+   479→    const label = payLabel(w, payId)
+   480→    updateWallet((x) => ({
+   481→      ...deduct(x, payId, n),
+   482→      relativeCards: x.relativeCards.map((c) => (c.id === cardId ? { ...c, used: Math.round((c.used + n) * 100) / 100 } : c)),
+   483→    }))
+   484→    addBill({ kind: '亲属卡', title: `${card.friendName} 的亲属卡消费`, amount: -n, status: `已用${label}支付`, friendName: card.friendName, note: note.trim() || '亲属卡消费' })
+   485→    setView({
+   486→      name: 'paySuccess',
+   487→      data: {
+   488→        title: '支付成功',
+   489→        amount: n,
+   490→        rows: [
+   491→          { label: '消费项目', value: `${card.friendName} 的亲属卡` },
+   492→          { label: '支付方式', value: label },
+   493→        ],
+   494→        back: { name: 'relativeCard' },
+   495→      },
+   496→    })
+   497→    return null
+   498→  }
+   499→
+   500→  const openWalletPage = (page: 'change' | 'fund' | 'paycode' | 'receivecode' | 'scan' | 'bills' | 'redpacket' | 'redpacketRecords' | 'transfer' | 'relatives' | 'bankcards') => {
+   501→    const next: Record<string, View> = {
+   502→      change: { name: 'walletChange' },
+   503→      fund: { name: 'walletFund' },
+   504→      paycode: { name: 'payCode' },
+   505→      receivecode: { name: 'receiveCode' },
+   506→      scan: { name: 'scan' },
+   507→      bills: { name: 'bills', filter: 'all' },
+   508→      redpacket: { name: 'redPacket' },
+   509→      redpacketRecords: { name: 'redPacketRecords' },
+   510→      transfer: { name: 'transfer' },
+   511→      relatives: { name: 'relativeCard' },
+   512→      bankcards: { name: 'bankcards' },
+   513→    }
+   514→    setView(next[page])
+   515→  }
+   516→
+   517→  let content: JSX.Element
+   518→  if (view.name === 'addFriend') {
+   519→    content = <AddFriend onBack={backToTabs} onCreated={onFriendCreated} friendId={view.friendId} />
+   520→  } else if (view.name === 'chat') {
+   521→    const friend = friends.find((f) => f.id === view.friendId)
+   522→    content = friend ? (
+   523→      <Chat
+   524→        key={friend.id}
+   525→        friend={friend}
+   526→        onBack={backToTabs}
+   527→        onEditFriend={() => setView({ name: 'addFriend', friendId: view.friendId })}
+   528→        onOpenSettings={() => setView({ name: 'apiSetting' })}
+   529→        onOpenChatSettings={() => setView({ name: 'chatSettings', friendId: view.friendId })}
+   530→        onOpenStickers={() => setView({ name: 'stickers' })}
+   531→        onOpenLocation={() => setView({ name: 'location', friendId: view.friendId })}
+   532→        onOpenRedPacket={() => setView({ name: 'redPacket', friendId: view.friendId, fromChat: true })}
+   533→        onOpenTransfer={() => setView({ name: 'transfer', friendId: view.friendId, fromChat: true })}
+   534→        onOpenRelativeGift={() => setView({ name: 'relativeGift', friendId: view.friendId, fromChat: true })}
+   535→        onOpenRedPacketDetail={(friendId, msgId) => setView({ name: 'rpDetail', friendId, msgId })}
+   536→        onOpenTransferDetail={(friendId, msgId) => setView({ name: 'tfDetail', friendId, msgId })}
+   537→        onOpenRelativeCardDetail={(cardId) => setView({ name: 'relativeCardDetail', cardId, friendId: view.friendId, fromChat: true })}
+   538→        pendingLocation={pendingLocation}
+   539→        onConsumeLocation={() => setPendingLocation(null)}
+   540→        jumpTo={view.jumpTo}
+   541→      />
+   542→    ) : (
+   543→      <div className="page">
+   544→        <div className="empty-hint">好友不存在</div>
+   545→      </div>
+   546→    )
+   547→  } else if (view.name === 'location') {
+   548→    content = (
+   549→      <LocationPage
+   550→        onBack={() => setView({ name: 'chat', friendId: view.friendId })}
+   551→        onSend={(loc) => {
+   552→          setPendingLocation(loc)
+   553→          setView({ name: 'chat', friendId: view.friendId })
+   554→        }}
+   555→      />
+   556→    )
+   557→  } else if (view.name === 'wallet') {
+   558→    content = <WalletHome onBack={backToTabs} onOpen={openWalletPage} onOpenPassword={() => setView({ name: 'payPwd' })} />
+   559→  } else if (view.name === 'walletChange') {
+   560→    content = (
+   561→      <Change
+   562→        onBack={() => setView({ name: 'wallet' })}
+   563→        onOpenFund={() => setView({ name: 'walletFund' })}
+   564→        onOpenBills={() => setView({ name: 'bills', filter: 'change' })}
+   565→        onOpenBankCards={() => setView({ name: 'bankcards' })}
+   566→      />
+   567→    )
+   568→  } else if (view.name === 'walletFund') {
+   569→    content = <ChangeFund onBack={() => setView({ name: 'wallet' })} onOpenBills={() => setView({ name: 'bills', filter: 'fund' })} />
+   570→  } else if (view.name === 'payCode') {
+   571→    content = <PayCode onBack={() => setView({ name: 'wallet' })} onOpenReceive={() => setView({ name: 'receiveCode' })} />
+   572→  } else if (view.name === 'receiveCode') {
+   573→    content = <ReceiveCode onBack={() => setView({ name: 'wallet' })} />
+   574→  } else if (view.name === 'scan') {
+   575→    content = <Scan onBack={() => setView({ name: 'wallet' })} />
+   576→  } else if (view.name === 'bills') {
+   577→    content = <Bills title="账单" initialFilter={view.filter ?? 'all'} onBack={() => setView({ name: 'wallet' })} onOpenDetail={(billId) => setView({ name: 'billDetail', billId })} />
+   578→  } else if (view.name === 'billDetail') {
+   579→    content = <BillDetail billId={view.billId} onBack={() => setView({ name: 'bills', filter: 'all' })} />
+   580→  } else if (view.name === 'redPacket') {
+   581→    content = (
+   582→      <RedPacket
+   583→        friendId={view.friendId}
+   584→        friendName={friends.find((f) => f.id === view.friendId)?.name}
+   585→        friendAvatar={friends.find((f) => f.id === view.friendId)?.avatar}
+   586→        onBack={() => (view.fromChat ? setView({ name: 'chat', friendId: view.friendId ?? '' }) : setView({ name: 'wallet' }))}
+   587→        onSubmit={submitRedPacket}
+   588→      />
+   589→    )
+   590→  } else if (view.name === 'redPacketRecords') {
+   591→    content = <RedPacketRecords onBack={() => setView({ name: 'wallet' })} />
+   592→  } else if (view.name === 'transfer') {
+   593→    content = (
+   594→      <Transfer
+   595→        friendId={view.friendId ?? null}
+   596→        friendName={friends.find((f) => f.id === view.friendId)?.name ?? ''}
+   597→        friendAvatar={friends.find((f) => f.id === view.friendId)?.avatar}
+   598→        onBack={() => (view.fromChat ? setView({ name: 'chat', friendId: view.friendId ?? '' }) : setView({ name: 'wallet' }))}
+   599→        onSubmit={submitTransfer}
+   600→      />
+   601→    )
+   602→  } else if (view.name === 'relativeCard') {
+   603→    content = (
+   604→      <RelativeCardPage
+   605→        onBack={() => setView({ name: 'wallet' })}
+   606→        onGiftSubmit={submitGift}
+   607→        onSpendSubmit={submitSpend}
+   608→      />
+   609→    )
+   610→  } else if (view.name === 'relativeGift') {
+   611→    content = (
+   612→      <RelativeGift
+   613→        friendId={view.friendId}
+   614→        friendName={friends.find((f) => f.id === view.friendId)?.name}
+   615→        friendAvatar={friends.find((f) => f.id === view.friendId)?.avatar}
+   616→        onBack={() => (view.fromChat ? setView({ name: 'chat', friendId: view.friendId ?? '' }) : setView({ name: 'wallet' }))}
+   617→        onSubmit={submitGift}
+   618→      />
+   619→    )
+   620→  } else if (view.name === 'paySuccess') {
+   621→    content = <PaySuccess data={view.data} onDone={() => setView(view.data.back)} />
+   622→  } else if (view.name === 'rpDetail') {
+   623→    const rpMsg = loadMessages().find((m) => m.id === view.msgId && m.friendId === view.friendId)
+   624→    content = rpMsg ? (
+   625→      <RedPacketDetail friendId={view.friendId} msgId={view.msgId} onBack={() => setView({ name: 'chat', friendId: view.friendId })} />
+   626→    ) : (
+   627→      <div className="page">
+   628→        <div className="empty-hint">红包不存在</div>
+   629→      </div>
+   630→    )
+   631→  } else if (view.name === 'tfDetail') {
+   632→    const tfMsg = loadMessages().find((m) => m.id === view.msgId && m.friendId === view.friendId)
+   633→    content = tfMsg ? (
+   634→      <TransferDetail
+   635→        friendId={view.friendId}
+   636→        msgId={view.msgId}
+   637→        onBack={() => setView({ name: 'chat', friendId: view.friendId })}
+   638→        onOpenBills={() => setView({ name: 'bills', filter: 'transfer' })}
+   639→      />
+   640→    ) : (
+   641→      <div className="page">
+   642→        <div className="empty-hint">转账不存在</div>
+   643→      </div>
+   644→    )
+   645→  } else if (view.name === 'relativeCardDetail') {
+   646→    const card = loadWallet().relativeCards.find((c) => c.id === view.cardId)
+   647→    content = card ? (
+   648→      <RelativeCardDetail card={card} onBack={() => (view.fromChat ? setView({ name: 'chat', friendId: view.friendId ?? '' }) : setView({ name: 'wallet' }))} />
+   649→    ) : (
+   650→      <div className="page">
+   651→        <div className="empty-hint">亲属卡不存在</div>
+   652→      </div>
+   653→    )
+   654→  } else if (view.name === 'payPwd') {
+   655→    content = <PayPasswordSet onBack={() => setView({ name: 'wallet' })} />
+   656→  } else if (view.name === 'bankcards') {
+   657→    content = <BankCards onBack={() => setView({ name: 'wallet' })} />
+   658→  } else if (view.name === 'chatSettings') {
+   659→    const friend = friends.find((f) => f.id === view.friendId)
+   660→    content = friend ? (
+   661→      <ChatSettings
+   662→        friend={friend}
+   663→        onBack={() => {
+   664→          refreshData()
+   665→          setView({ name: 'chat', friendId: view.friendId })
+   666→        }}
+   667→        onOpenProfile={() => setView({ name: 'friendDetail', friendId: view.friendId })}
+   668→        onOpenSearch={() => setView({ name: 'chatSearch', friendId: view.friendId })}
+   669→        onOpenBg={() => setView({ name: 'chatBg', friendId: view.friendId })}
+   670→        onOpenTranslateLang={() => setView({ name: 'translateLang', friendId: view.friendId })}
+   671→      />
+   672→    ) : (
+   673→      <div className="page">
+   674→        <div className="empty-hint">好友不存在</div>
+   675→      </div>
+   676→    )
+   677→  } else if (view.name === 'translateLang') {
+   678→    const friend = friends.find((f) => f.id === view.friendId)
+   679→    content = friend ? (
+   680→        <TranslateLang
+   681→          friend={friend}
+   682→          onBack={() => {
+   683→            refreshData()
+   684→            setView({ name: 'chatSettings', friendId: view.friendId })
+   685→          }}
+   686→        />
+   687→    ) : (
+   688→      <div className="page">
+   689→        <div className="empty-hint">好友不存在</div>
+   690→      </div>
+   691→    )
+   692→  } else if (view.name === 'chatSearch') {
+   693→    const friend = friends.find((f) => f.id === view.friendId)
+   694→    content = friend ? (
+   695→      <ChatSearch
+   696→        friendId={view.friendId}
+   697→        friendName={friend.name}
+   698→        onBack={() => setView({ name: 'chatSettings', friendId: view.friendId })}
+   699→        onJump={(messageId) => setView({ name: 'chat', friendId: view.friendId, jumpTo: messageId })}
+   700→      />
+   701→    ) : (
+   702→      <div className="page">
+   703→        <div className="empty-hint">好友不存在</div>
+   704→      </div>
+   705→    )
+   706→  } else if (view.name === 'chatBg') {
+   707→    const friend = friends.find((f) => f.id === view.friendId)
+   708→    content = friend ? (
+   709→      <ChatBackground
+   710→        friendId={view.friendId}
+   711→        friendName={friend.name}
+   712→        onBack={() => setView({ name: 'chatSettings', friendId: view.friendId })}
+   713→      />
+   714→    ) : (
+   715→      <div className="page">
+   716→        <div className="empty-hint">好友不存在</div>
+   717→      </div>
+   718→    )
+   719→  } else if (view.name === 'friendDetail') {
+   720→    const friend = friends.find((f) => f.id === view.friendId)
+   721→    content = friend ? (
+   722→      <FriendDetail
+   723→        friend={friend}
+   724→        onBack={backToTabs}
+   725→        onOpenChat={() => openChat(view.friendId)}
+   726→        onEdit={() => setView({ name: 'addFriend', friendId: view.friendId })}
+   727→        onDelete={() => {
+   728→          saveFriends(loadFriends().filter((f) => f.id !== view.friendId))
+   729→          saveMessages(loadMessages().filter((m) => m.friendId !== view.friendId))
+   730→          refreshData()
+   731→          setView({ name: 'tabs' })
+   732→        }}
+   733→      />
+   734→    ) : (
+   735→      <div className="page">
+   736→        <div className="empty-hint">好友不存在</div>
+   737→      </div>
+   738→    )
+   739→  } else if (view.name === 'moments') {
+   740→    content = <Moments onBack={backToTabs} />
+   741→  } else if (view.name === 'myProfile') {
+   742→    content = <MyProfile onBack={backToTabs} onEditPersona={(personaId) => setView({ name: 'addPersona', personaId })} onOpenMoments={() => setView({ name: 'moments' })} onOpenMemory={() => setView({ name: 'memory' })} />
+   743→  } else if (view.name === 'stickers') {
+   744→    content = <StickerPage onBack={() => setView({ name: 'tabs' })} />
+   745→  } else if (view.name === 'addPersona') {
+   746→    content = <AddPersona onBack={() => setView({ name: 'myProfile' })} personaId={view.personaId} />
+   747→  } else if (view.name === 'settings') {
+   748→    content = (
+   749→      <Settings
+   750→        onBack={backToTabs}
+   751→        onOpenApi={() => setView({ name: 'apiSetting' })}
+   752→        onOpenVision={() => setView({ name: 'visionApi' })}
+   753→        onOpenVoice={() => setView({ name: 'voiceApi' })}
+   754→      />
+   755→    )
+   756→  } else if (view.name === 'apiSetting') {
+   757→    content = <ApiSettingPage onBack={() => setView({ name: 'settings' })} />
+   758→  } else if (view.name === 'visionApi') {
+   759→    content = <VisionApiPage onBack={() => setView({ name: 'settings' })} />
+   760→  } else if (view.name === 'voiceApi') {
+   761→    content = <VoiceApiPage onBack={() => setView({ name: 'settings' })} />
+   762→  } else if (view.name === 'memory') {
+   763→    content = (
+   764→      <MemoryPage
+   765→        friendId={view.friendId}
+   766→        onBack={backToTabs}
+   767→        onPickFriend={(id) => setView({ name: 'memory', friendId: id })}
+   768→        onClearFriend={() => setView({ name: 'memory' })}
+   769→        onOpenApi={() => setView({ name: 'apiSetting' })}
+   770→      />
+   771→    )
+   772→  } else {
+   773→    content = (
+   774→      <div className="tab-shell">
+   775→        <div className="tab-content" key={tab}>
+   776→          {tab === 'messages' && (
+   777→            <Messages friends={friends} messages={messages} onOpenChat={openChat} onAddFriend={() => setView({ name: 'addFriend' })} onOpenMoments={() => setView({ name: 'moments' })} onRefresh={refreshData} />
+   778→          )}
+   779→          {tab === 'contacts' && (
+   780→            <Contacts
+   781→              friends={friends}
+   782→              onOpenChat={openChat}
+   783→              onOpenFriend={(friendId) => setView({ name: 'friendDetail', friendId })}
+   784→              onAddFriend={() => setView({ name: 'addFriend' })}
+   785→              onOpenMoments={() => setView({ name: 'moments' })}
+   786→            />
+   787→          )}
+   788→          {tab === 'discover' && <Discover onOpenMoments={() => setView({ name: 'moments' })} />}
+   789→          {tab === 'me' && <Me onOpenProfile={() => setView({ name: 'myProfile' })} onOpenSettings={() => setView({ name: 'settings' })} onOpenMoments={() => setView({ name: 'moments' })} onOpenMemory={() => setView({ name: 'memory' })} onOpenStickers={() => setView({ name: 'stickers' })} onOpenWallet={() => setView({ name: 'wallet' })} />}
+   790→        </div>
+   791→        <nav className="tabbar">
+   792→          {TABS.map((t) => (
+   793→            <button key={t.key} className={`tab-item ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
+   794→              {t.icon(tab === t.key)}
+   795→              <span className="tab-label">{t.label}</span>
+   796→            </button>
+   797→          ))}
+   798→        </nav>
+   799→      </div>
+   800→    )
+   801→  }
+   802→
+   803→  return (
+   804→    <div className={`phone${embedded ? ' embedded' : ''}`}>
+   805→      {content}
+   806→    </div>
+   807→  )
+   808→}
+   809→
+   810→/* 主入口分流：/?as=app 渲染项目主体；默认渲染 iPhone 桌面（iframe 承载 /ios） */
+   811→declare global {
+   812→  interface Window {
+   813→    __closeApp?: () => void
+   814→  }
+   815→}
+   816→
+   817→function isAsApp() {
+   818→  return typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('as')
+   819→}
+   820→
+   821→export default function App() {
+   822→  const [asApp] = useState(isAsApp)
+   823→  useEffect(() => {
+   824→    if (!asApp) document.title = '主屏幕'
+   825→  }, [asApp])
+   826→  if (asApp) return <AppView />
+   827→  return (
+   828→    <div style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', background: '#000' }}>
+   829→      <iframe
+   830→        title="主屏幕"
+   831→        src="/ios/index.html"
+   832→        style={{ width: '100%', height: '100%', border: 0, display: 'block' }}
+   833→      />
+   834→    </div>
+   835→  )
+   836→}
+   837→

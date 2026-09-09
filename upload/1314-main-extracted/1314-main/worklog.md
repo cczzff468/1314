@@ -1,0 +1,311 @@
+# 项目工作日志
+
+---
+Task ID: 1
+Agent: Z.ai Code (主控)
+Task: 将上传的 workspace.zip（两个项目：Vite React「信息」APP + 原生JS iOS桌面模拟器）合并进当前 Next.js 项目，内容零改动，让所有 APP 在同一个项目中运行
+
+Work Log:
+- 解压并分析 /home/z/my-project/upload/workspace.zip，识别出双项目结构：
+  - 根目录 = Vite React 项目「Cove」（信息APP，微信式聊天应用，src/ 共50个源文件）
+  - ios/ = 原生JS iOS桌面模拟器（锁屏/主屏/动态岛/多任务 + 15个应用模块，54个文件）
+  - 原架构：`/` → React渲染 iframe → /ios/index.html → 桌面「信息」图标 → iframe /?as=app（回到React主体）
+  - 原后端：Vite 代理 /api → localhost:3001（未上传，需在本项目内重建）
+- 迁移方案（内容零改动）：
+  - `ios/` → `public/ios/`（54文件原样静态服务，ES Module/CSS 相对路径全部原样生效）
+  - 上传的 `public/`（icons/、manifest.webmanifest、sw.js）→ Next.js `public/`
+  - 上传的 `src/` → `src/cove/`（50文件原样，仅排除 Vite 专属的 main.tsx / vite-env.d.ts）
+  - 新增 `src/cove/CoveBoot.tsx`：等价复刻 main.tsx 启动逻辑（hydrate → seedIfEmpty → #root createRoot 渲染 StrictMode<App/> + SW注册）
+  - 重写 `src/app/layout.tsx`：zh-CN、Cove 标题、原 index.html 的 viewport/themeColor/manifest/icons/appleWebApp meta、引入 cove/index.css（移除 Tailwind globals.css 以保证像素级一致）
+  - 重写 `src/app/page.tsx`：client 组件 + next/dynamic ssr:false 加载 CoveBoot（App 依赖 window/IndexedDB）
+  - 新增 `src/app/api/chat/route.ts`：z-ai-web-dev-sdk LLM，stream=true 时透传上游 OpenAI 兼容 SSE（与 ios/js/api/chat.js readSSE 协议完全一致）
+  - 新增 `src/app/api/image/route.ts`：z-ai-web-dev-sdk VLM（createVision），返回 {content}
+  - `bun add jsqr`（钱包扫码页依赖）
+  - `eslint.config.mjs`：src/cove/** 关闭 React 19 新增风格类规则（set-state-in-effect/refs/immutability），ignores 增加 upload/public/ios/mini-services
+- 验证（agent-browser + z-ai vision 截图分析 + dev.log）：
+  - `/` 锁屏渲染 ✓ → 上滑解锁 ✓ → 主屏15个图标+天气小组件（真实天气）✓
+  - 「信息」APP（iframe /?as=app）打开 ✓：消息/联系人/发现/我 Tab + 种子好友（林小夏/陈默/苏晴）
+  - 聊天会话打开 ✓、发消息 → 原版未配置API时的错误提示行为一致 ✓
+  - __closeApp 桥关闭回桌面 ✓；计算器 7+19=26 ✓；备忘录/音乐/设置 APP ✓
+  - 设置→AI聊天API→测试连接：✓连接成功 344ms 内置AI（POST /api/chat 200）
+  - 设置→图像识别API→测试识别：✓识别成功 717ms 内置视觉模型（POST /api/image 200）
+  - 桌面视口居中手机框 ✓；390x844 移动端全屏 ✓；控制台零错误 ✓；lint 0 error ✓
+
+Stage Summary:
+- 两个项目已合并为一个 Next.js 16 项目：`/` = 完整 iPhone 体验（锁屏→桌面→所有APP）
+- 「信息」APP 与其他原生JS APP 架构完全保留（互嵌 iframe + 同源桥接 __closeApp/__navBack/postMessage 均有效）
+- 原缺失的 localhost:3001 后端已用 z-ai-web-dev-sdk 在同项目内等价重建（/api/chat 流式 + /api/image 视觉）
+- 应用源码 104 个文件全部原样迁移，唯一新增文件：CoveBoot.tsx、api/chat/route.ts、api/image/route.ts、page.tsx/layout.tsx（Next.js 壳）
+- 关键产物：public/ios/**（原生JS）、src/cove/**（React 信息APP）、src/app/api/{chat,image}/route.ts
+
+---
+Task ID: 2
+Agent: Z.ai Code (主控)
+Task: 修复用户报告的三个多任务/主屏交互 bug：①进入信息APP退出后主屏点击无反应 ②其他APP内多任务切换器中信息卡片显示一片空白 ③信息界面内上滑无法唤起多任务切换器
+
+Work Log:
+- 复现与根因定位（agent-browser 桌面 + 390x844 移动布局双会话，合成事件模拟真实触摸）：
+  - Bug① 根因（确定性复现）：信息APP为 keepAlive 应用，closeApp 后窗口 display:none 驻留 #app-layer，
+    层不再满足 `:empty` → 全屏 `#app-layer`(z-index:100) 的 pointer-events:auto 拦截了主屏(#home, z-index:1)所有点击，
+    elementFromPoint 证实点击命中 #app-layer 而非图标
+  - Bug③ 根因（触摸设备，合成 pointercancel 序列验证）：React 手势仅绑定 Pointer 事件；
+    真机上浏览器接管列表滚动时派发 pointercancel → end() 复位 tracking → 手势被杀死，且无 touch 事件兜底 → 永远无法触发
+  - Bug② 根因（真实设备场景加固）：切换器信息卡片为 srcdoc 静态快照，依赖 <link> 外链 CSS；
+    部分 srcdoc 环境外链样式不加载时内容整体塌陷成"空白卡"；另有 iframe 重载中(#root为空)时快照也为空白
+- 修复（共 4 处，均不改动应用内容，只动壳层系统机制）：
+  - public/ios/css/phone.css：`#app-layer` 永远 pointer-events:none，`#app-layer > .app-window` pointerEvents:auto
+    （窗口移入切换器卡片后不再是层的子元素，`.ts-snap .app-window` 的 none 规则继续生效，天然互斥不冲突）
+  - src/cove/App.tsx：底部上滑手势改双流 —— 鼠标/笔走 Pointer 事件、触摸走 touch 事件（touchmove 在浏览器接管滚动后仍持续派发），
+    begin 加 tracking 起点守卫防双流覆盖；与壳层 onSwipe 的双绑定策略对齐
+  - public/ios/js/core/applayer.js frameSnapshotSrcdoc：快照自包含加固 —— ① #root 为空(未渲染/重载中)返回 null → 切换器降级图标占位卡；
+    ② <link rel=stylesheet> 全部内联为 <style>（同源读 cssRules，相对 url() 按样式表地址改绝对）；③ 注入 <base href=原页面URL>；
+    ④ 剥离 preload/preconnect 等无效链
+  - public/ios/js/modules/info.js + phone.css：iframe 首次挂载到 load 完成前显示系统级 spinner 占位（.app-boot-mask），
+    消除首载/重载的"一片空白"感；保活重开不触发 mount 不受影响，占位不在 iframe 文档内不进快照
+- 回归验证（桌面 1200x900 + 移动 390x844 双会话）：
+  - Bug①：开信息→返回键退出→点计算器图标 → 正常打开 ✓（修复前 elementFromPoint 命中 #app-layer，点击无效）
+  - Bug③：合成触摸序列（pointerdown→pointercancel→touchstart/touchmove 上滑40px）→ 切换器正常唤起 ✓（修复前 msgCount=0 不触发）；鼠标流同样正常 ✓
+  - Bug②：信息关闭态+计算器前台→切换器 → 信息卡片完整渲染（CSS 1133 条规则全部内联、.phone 正常布局、VLM 视觉确认聊天列表清晰）✓；
+    #root 清空模拟重载中 → 降级为图标占位卡（非空白）✓
+  - 无回归：切换器实时窗口卡片 pointer-events:none / 点卡片恢复窗口 auto / 恢复后计算器按键可交互（按7显示7）✓；
+    home-bar 点击、onSwipe 上滑、锁屏解锁均正常 ✓；lint 0 error ✓；双会话控制台零错误 ✓；dev.log 全 200 ✓
+
+Stage Summary:
+- 三个 bug 全部修复并双端验证：主屏点击被 #app-layer 拦截（CSS 层穿透修复）、触摸设备 pointercancel 杀手势（touch 双流兜底）、
+  信息卡片空白（快照 CSS 内联自包含 + base 注入 + 空内容降级占位卡 + 首载 spinner）
+- 修改文件：public/ios/css/phone.css、public/ios/js/core/applayer.js、public/ios/js/modules/info.js、src/cove/App.tsx
+- 关键决策：不动应用内容与交互文案，所有修复都收敛在 iOS 壳层系统机制（事件层穿透、手势双流、快照自包含）
+
+---
+Task ID: 3
+Agent: Z.ai Code (主控)
+Task: 会话续接后的全面回归验证 + 修复触摸手势残留缺陷（bug③真机场景下仍未完全修复的问题）
+
+Work Log:
+- 续接会话：核对 Task 2 的 4 处修复代码均已写入（phone.css 层穿透 / applayer.js 快照自包含 / info.js 启动占位 / App.tsx 触摸双流）
+- agent-browser 端到端回归验证：
+  - Bug① 复验：开信息 → 返回键退出 → 命中测试 calculator 图标 ✓ → 实际点击计算器正常打开（VLM 确认科学计算器界面）✓
+  - Bug② 复验：计算器前台 + 信息保活 → 上滑唤起切换器 → 信息卡片 srcdoc 140KB、<style> 内联 ✓、<base> 注入 ✓、VLM 确认聊天列表内容完整非空白 ✓
+  - Bug③ 复验（关键发现）：合成触摸序列带 pointercancel 时手势死亡（不触发 ios-open-switcher），不带 pointercancel 则正常触发
+- 根因定位（残留缺陷）：App.tsx 触摸双流的 `onPu` 绑定在全局 `pointercancel` 上且不区分 pointerType ——
+  真机上浏览器接管滚动时先发 pointercancel（pointerType:'touch'）→ onPu 执行 end() → tracking 复位 →
+  后续 touchmove 全部无效 → 手势被杀死。壳层 utils.js 的 onSwipe 无此问题（根本不监听 pointercancel）。
+- 修复（1 处，不改动任何内容文案）：src/cove/App.tsx 的 onPu 增加 pointerType==='touch' 守卫 ——
+  触摸指针的 pointerup/pointercancel 不在 Pointer 流收尾，触摸流由 touchend/touchcancel 收尾，与壳层 onSwipe 双流策略完全对齐
+- 修复后复验（全部通过）：
+  - touchstart → pointercancel → touchmove×4 → touchend 完整真机序列 → 切换器打开 ✓、ios-open-switcher 消息到达壳层 ✓
+  - 中途 pointercancel 杀入（已滑 12px 后接管）→ 手势仍触发 ✓
+  - 鼠标流（桌面拖拽上滑）→ 正常触发 ✓（无回归）
+  - 屏幕中部起手上滑 → 不误触发（delta=0）✓
+  - home-bar 点击显式入口 → 切换器打开 ✓；点击卡片恢复信息应用 ✓；再次退出→再点计算器图标 ✓（Bug① 全周期）
+  - 控制台零错误、dev.log 全 200、lint 0 error（3 条既有 warning 非本次改动引入）
+
+Stage Summary:
+- 三个 bug 最终全部修复并双端（触摸流+鼠标流）验证通过
+- 本轮关键修复：App.tsx onPu 触摸守卫，堵住 pointercancel 杀死触摸流的最后泄漏（真机 bug③ 的实际残留根因）
+- 修改文件：src/cove/App.tsx（仅手势机制，内容零改动）
+
+---
+Task ID: 4
+Agent: Z.ai Code (主控)
+Task: 设置APP删除"AI 聊天 API/图像识别 API"两项；把信息APP"我→设置"里的"API设置/识图模型/语音配置"三项移到设置APP
+
+Work Log:
+- 结构调研：原生设置APP（settings.js）的旧API页配置壳层存储（Settings 'api'/'imageApi'）；
+  信息APP三项为React页面（ApiSettingPage/VisionApiPage/VoiceApiPage），读写 Cove 存储（IndexedDB ios-im / kv / im.api）
+- 迁移方案：设置APP子页用 iframe 内嵌同源独立页 /?as=page&p=api|vision|voice —— React 页面组件与存储零改动，仅换承载位置
+- React 侧改动：
+  - src/cove/App.tsx：新增 standalonePage() 分流（/?as=page&p=…）→ .phone.embedded 包裹单页渲染（返回键隐藏由壳层fab统一接管，onBack 桥 window.parent.__covePageBack 兜底）；Settings 渲染移除三个 onOpen* 传参
+  - src/cove/pages/Settings.tsx：删除 API设置/识图模型/语音配置 三行及相关 props/导入（仅保留原有静态行）
+  - src/cove/store.ts：新增 refreshApiSetting()（重读 im.api 入内存）+ 模块级 message 监听 cove-refresh-api
+- 原生侧改动（settings.js）：
+  - 删除：groupAPI 旧行、bindGroups 旧值刷新、openApiPage(599-1257) + openModelSheet + SPARK_SVG、section 深链、
+    chat.js 全部 API 导入、dialog/escapeAttr/sheet 死导入、BOOKMARK/PLUS/LINK/EYE/X/MORE_SVG、ICONS.wrench/eye
+  - 新增：三行（API设置/识图模型/语音配置，图标沿用信息APP设置页原样式）+ loadCoveApi()（同源直开 ios-im 读 im.api，
+    localStorage 兜底）+ refreshCoveApiRows()（预览文案与React页完全一致）+ openCovePage()（noNavbar 子页 + iframe +
+    app-boot-mask 占位 + __covePageBack 桥 + onPop 清理/通知/刷新）+ notifyInfoRefreshApi()（getAliveWin('info') →
+    postMessage cove-refresh-api）
+  - 关键修正：makePage 不转发 onPop 选项 → 改为 page.onPop = fn 挂载（nav.pop() 才能触发）
+- settings.css：删除 82-556 行全部死 CSS（api-*/atr-*/md-* 均无引用，含 .btn-fill.ghost.danger 组合无使用）；
+  新增 .st-cove-host iframe 宿主样式
+- 端到端验证（agent-browser + VLM）：
+  - 设置APP根页：API 配置分组三行齐全、旧两行已消失 ✓（DOM + VLM 双确认）
+  - API设置子页：完整渲染（标题/预设 OpenAI·Azure·Ollama/地址/Key/模型/温度/Token/超时），fab 返回正常 ✓
+  - 识图模型/语音配置子页：标题与内容完整渲染 ✓；子页弹出后桥清理、根页预览刷新 ✓
+  - 存储互通：独立页填 API Key → 返回后根页预览"没有配置→模型：gpt-4o-mini"（原生读 ios-im DB）✓
+  - 保活同步：信息APP打开显示 gpt-4o-mini → 关闭（保活）→ 设置APP改模型 gpt-4o-interop-xyz → 弹出子页时
+    cove-refresh-api 消息送达信息APP（探针捕获）→ 重开信息APP（iframe 未重载）记忆匣子显示 gpt-4o-interop-xyz ✓
+  - 信息APP"我→设置"：三行已移除（DOM + VLM 双确认，其余行保留）✓
+  - 回归：控制台零错误、lint 0 error、dev.log 全 200（含 /?as=page&p=api）、settings.js 解析通过、
+    主屏/解锁/应用开关流程正常 ✓
+
+Stage Summary:
+- 设置APP现承载全部四项 API/语音配置入口（API设置/识图模型/语音配置），旧的"AI 聊天 API/图像识别 API"及其 740 行页面代码已删除
+- 信息APP"我→设置"仅保留通用设置项；三项配置页通过 /?as=page&p=… 独立模式在设置APP内呈现，UI 与信息APP内完全一致
+- 三项配置的存储与消费者完全不变（im.api / ios-im IndexedDB），设置APP与信息APP双向实时互通（含保活内存同步）
+- 修改文件：src/cove/App.tsx、src/cove/pages/Settings.tsx、src/cove/store.ts、public/ios/js/modules/settings.js、public/ios/css/modules/settings.css
+
+---
+Task ID: 5
+Agent: Z.ai Code (主控)
+Task: ①设置APP打开API配置子页秒开（用户反馈"为什么还要加载"）②删除原生微信模块 wechat.js
+
+Work Log:
+- 根因定位：openCovePage 每次点击都新建 iframe 加载 /?as=page&p=… → 整个 React 应用重新引导（HTML+JS+hydrate）
+  → 每次打开都显示 app-boot-mask 转圈；重复打开重复付费
+- 秒开方案（常驻池 + 覆盖层 + 消息切页）：
+  - src/cove/App.tsx：standalone 页模式支持 postMessage 切页（{type:'cove-page',p}→setPage）+ 就绪回执
+    （{type:'cove-page-ready'}，防监听器晚于切页指令就绪丢消息）；页面组件与文案零改动
+  - settings.js：单一 iframe 常驻 #app-layer（DOM 从不搬动→永不重载），设置APP mount 时即预载；
+    openCovePage 改为推占位导航页 + 显示常驻覆盖层（z:60，高于窗口(z-auto)、低于返回键(z:300)，
+    状态栏900/切换器860天然更高）；三页切换走 postMessage（同一 React 实例换组件）；
+    入/离场动画复用全局 navEnter/navLeave 关键帧与 nav.push/pop 同步
+  - 生命周期钩子：Bus app:closed → 立即隐藏+清 __covePageBack 桥+notifyInfoRefreshApi；
+    MutationObserver 监听 #task-switcher class → 切换器开=隐藏（窗口搬入卡片时覆盖层不能叠在上层），
+    收起=子页未退且设置仍前台则原位恢复（iframe 未动→内容与滚动全保留）
+  - 切换器卡片内容：隐藏期间向占位宿主注入 frameSnapshotSrcdoc 静态快照（与信息APP卡片同源技术），
+    恢复时移除——修复"正在使用"卡片空白问题
+  - 验证中发现并修复：app:closed 处理器在"覆盖层已被切换器隐藏"路径早退 → 桥未清+刷新通知丢失 →
+    改为 coveVisible/coveRestore/covePageEl 三态任一即收尾
+- wechat.js 删除（1281行）+ wechat.css 删除（376行）：
+  - 共享 CSS 选择器迁移 misc.css：.avatar.av-sil(.group)、.contacts-letter、.wx-d-*、.picker-grid、
+    .wechat-green（仍被通讯录/朋友圈/主题使用）；--wechat 变量保留（misc/phone.css 在用）
+  - index.html 去 wechat.css link；main.js 去 import+注册（16个应用）；icons.js 去 wechat 图标定义
+    （所有图标使用点均有 Registry.get/typeof 守卫，安全）；home.js RETIRED_APPS 注释更新（过滤器保留
+    兼容存量 homeLayout）
+  - contacts.js「发消息」：改 openApp('info')，删除原生会话创建+sessionStorage openConv 桥（仅微信消费）
+  - camera.js「发送给 AI 助手」：删除 wechat 动态导入；改为照片落相册（防丢失）+ 跳转信息APP；
+    desc「跳转到微信聊天」→「跳转到信息聊天」
+- 端到端验证（agent-browser 桌面 + 390x844 移动双会话 + VLM 截图分析）：
+  - 秒开：点击后 0.7-1.8ms 覆盖层可见、无转圈、React 内容已渲染（VLM 确认 API表单/标题/状态栏完整）；
+    api→vision→voice 切页实测 20.2ms；重开设置APP（池跨会话存活）依旧 0.7ms 秒开
+  - 导航一致性：返回键（fab z:300 在覆盖层之上可点击）→ 根页恢复+预览刷新"没有配置"+桥清理；
+    postMessage 切页内容逐页验证正确
+  - 切换器：开=覆盖层隐藏+卡片显示 API 页静态快照（VLM：表单与标题、应用名脚注、无异常浮层）；
+    点当前卡收起=快照移除+覆盖层恢复+页面内容/状态原样（iframe 从未重载）；底部上滑 dismissToHome=
+    应用关闭、主屏显示、无覆盖层泄漏、桥已清
+  - 互通回归：子页 pop → 信息APP（保活 iframe）探针收到 cove-refresh-api ✓；
+    通讯录发消息 → 打开信息APP（React 聊天列表完整，VLM 确认）而非微信 ✓
+  - 双端控制台零错误、lint 0 error（3条既有 warning）、dev.log 全 200（/、/?as=app、/?as=page&p=api）、
+    移动端覆盖层 0,0,390,844 铺满（VLM 无错位）
+
+Stage Summary:
+- API配置/识图模型/语音配置三个子页打开零加载：常驻池预载 + 覆盖层显隐 + postMessage 切页，
+  除首次预载竞态外永无转圈；池跨设置APP会话存活，切换器往返不重载
+- 原生微信模块彻底删除：文件+注册+图标+样式链接+两处跳转引用全清理，共享样式迁 misc.css，
+  通讯录/相机的跳转入口改指「信息」APP
+- 修改文件：src/cove/App.tsx、public/ios/js/modules/settings.js、public/ios/css/modules/settings.css、
+  public/ios/css/modules/misc.css、public/ios/index.html、public/ios/js/main.js、
+  public/ios/js/core/icons.js、public/ios/js/core/home.js、public/ios/js/modules/contacts.js、
+  public/ios/js/modules/camera.js；删除：public/ios/js/modules/wechat.js、public/ios/css/modules/wechat.css
+
+---
+Task ID: 6
+Agent: Z.ai Code (主控)
+Task: 性能优化：①刷新网页后进入太慢（锁屏出现前要等整个 React 应用引导）②进入信息界面仍有加载转圈（iframe 冷启动）
+
+Work Log:
+- 根因定位（两条独立瓶颈）：
+  - 瓶颈①：`/` 是 'use client' 页面 + dynamic(ssr:false) 加载整个 Cove React 应用（50 源文件全量模块图
+    + IndexedDB hydrate）——而默认模式最终只渲染一个 `<iframe src="/ios/index.html">`，
+    React 全量下载/解析/引导对首屏是纯开销，锁屏被阻塞
+  - 瓶颈②：点「信息」图标时 info.js mount 才创建 /?as=app iframe → 冷启动（Next render + 全量客户端
+    模块 + hydrate + render），app-boot-mask 转圈 1-2 秒
+- 修复①（首屏零 React 直出）：
+  - src/app/page.tsx 重写为 server component：searchParams 分流——无 `as` 参数直接 SSR 输出
+    黑底全屏 iframe /ios/index.html（与 App.tsx 默认分支 JSX 完全一致）+ 内联 SW 注册脚本；
+    generateMetadata 无 as 时 title='主屏幕'（对齐原 React document.title 行为）
+  - 新增 src/app/CoveApp.tsx（'use client' + dynamic ssr:false）承载 as=app / as=page 模式，
+    行为与原 page.tsx 完全一致；CoveBoot/App 零改动（iframe 内仍按 window.location.search 分流）
+  - 效果：HTML 一到浏览器，壳层静态资源立即并行加载，锁屏 44-63ms HTML / 135-205ms DCL 出现
+- 修复②（信息APP后台预热）：
+  - applayer.js 新增 prewarmedWins 池 + prewarm(id)：壳层启动时预创建 .app-window（display:none 挂
+    #app-layer，不进 keepAliveWins/最近任务 → 不出现在切换器、不挡主屏）并调用 app.mount（iframe 在
+    用户解锁期间后台完成加载与 React 引导，load 后 mask 自移除）
+  - openApp 三分支：保活恢复（原样）/ 预热转正（display:'' 接管，不重复 mount、iframe 不重载，享
+    图标缩放入场）/ 新建（原路径兜底，预热失败自动回退）；backFab 提取 ensureBackFab 幂等补建
+  - 新增 getBackgroundWin(id)（保活优先、预热实例也算运行中）——settings.js notifyInfoRefreshApi
+    改用之：预热期间设置APP改配置也能实时同步到预热实例内存，转正后不陈旧
+  - main.js boot() 尾部（Lock.show + Settings 预载之后、app:ready 之前）prewarm('info')
+- 修复过程中发现并修掉自身引入的 bug：公共路径 layer.appendChild(win) 对非末位子元素是 DOM 搬动 →
+  iframe 重载（设置APP常驻池 st-cove-pool 在层内时预热窗口被从队首搬到队尾、探针丢失+内容清空）——
+  改为仅新建窗口分支内挂载，保活/预热窗口原位不动
+- 端到端验证（agent-browser 桌面 + 390x844 移动 + VLM 截图分析 + 探针哨兵变量防重载检测）：
+  - 刷新进入：HTML 44-63ms、DCL 135-205ms、锁屏即显、title=主屏幕、/ 无 React root（零 Cove 模块下载）
+  - 信息秒开：点击图标 0.5-10ms 窗口转正（探针哨兵存活=iframe 零重载）、boot-mask 不存在、消息列表
+    立即完整渲染（VLM 双端确认）；解锁前预热已完成（React root 已渲染、mask 已移除）
+  - 预热与常驻池共存场景（曾触发重载 bug 的场景）修复后：解锁→设置→API子页→返回→关闭→点信息
+    → 1.2ms 秒开、哨兵存活、内容立即完整
+  - 保活链路回归：返回键关闭→窗口 display:none 驻留→重开 0.6ms 哨兵存活；切换器信息卡 140KB srcdoc
+    + 内联 <style>（Bug② 无回归）；信息内触摸上滑唤起切换器（Bug③ 无回归）；关闭信息后主屏计算器
+    可点击（Bug① 无回归）
+  - 互通回归：设置子页弹出/关闭 → cove-refresh-api 分别送达保活实例与预热实例（getBackgroundWin
+    覆盖）；设置API子页 1.3ms 秒开（Task 5 无回归）
+  - 移动端 390x844：iframe 390x844 铺满、秒开、VLM 确认布局无错位；控制台零错误、页面零错误、
+    lint 0 error（3条既有 warning）、dev.log 全 200
+
+Stage Summary:
+- 刷新后进入速度：`/` 首屏不再下载/引导整个 React 应用（服务端直出壳层 iframe），锁屏 HTML 级秒出
+- 进入信息界面零加载：壳层启动即后台预热信息APP窗口（display:none 驻留、不进切换器），
+  点击图标直接转正（0.5-10ms、无转圈、iframe 从未重载）；预热期间配置变更经 getBackgroundWin 实时同步
+- 关键教训：appendChild 对非末位子元素是 DOM 移动（会重载 iframe）——保活/预热窗口绝不重复挂载
+- 修改文件：src/app/page.tsx（重写）、src/app/CoveApp.tsx（新增）、
+  public/ios/js/core/applayer.js、public/ios/js/main.js、public/ios/js/modules/settings.js
+
+---
+Task ID: 7
+Agent: Z.ai Code (主控)
+Task: 世界书模块完整开发：主屏入口 + 世界书管理/新建/条目列表/条目编辑四层 UI + 范围逻辑（全局/局部/专属）+ AI聊天关键词检测与 System Prompt 注入，数据存 IndexedDB
+
+Work Log:
+- 数据层：public/ios/js/core/db.js 版本 3→4，新增 worldbooks（key:id, idx:updatedAt）与
+  wbentries（key:id, idx:bookId）两张表；React 侧 openWbDb 不带版本打开（壳层建库/升级，
+  万一库不存在 onupgradeneeded 补建两表，绝不与壳层版本冲突）
+- 壳层模块 public/ios/js/modules/worldbook.js（新建 659 行）：
+  - 根页面「我的世界书库」：统计行（共N个·最后更新）、书卡片（名称/范围彩色chip/启用开关/
+    条目·关键词统计/编辑+更多按钮）、空态引导；nav onShow 返回时刷新卡片统计
+  - 新建世界书：居中对话框（✕关闭/名称输入/范围三段选择+动态说明/取消·创建），
+    创建后直进条目管理；更多菜单：停用启用/重命名/复制(连条目,默认停用)/删除(连条目)
+  - 条目列表页：书名+范围说明头、范围行(actionSheet切换)、启用开关、
+    专属范围「绑定角色」行、＋新建条目虚线按钮、条目卡片(启用圆点/名称/优先级徽标/
+    关键词/插入位置)，条目按优先级降序
+  - 编辑条目页：启用开关、条目名称(注明不发送给AI)、插入位置二段(角色定义之前/之后)、
+    关键词输入(逗号分隔+说明)、优先级(数字越大越优先)、正文textarea、保存校验、删除
+  - 绑定角色：底部 sheet 多选（好友列表从信息APP ios-im 库 kv/im.friends 同源直读，
+    localStorage 兜底），勾选即改书.bound，完成保存
+- icons.js 新增 worldbook 图标（绿渐变翻开书本+书页横线）；main.js 注册（17个应用）；
+  home.js GRID_ORDER 末尾追加 worldbook（存量布局经兼容循环自动补到网格末尾）；
+  index.html 引入 worldbook.css；worldbook.css 全套样式（复用 .row/.switch/.segmented/
+  .inset-card/.dialog-mask/.sheet 等系统组件变量，深浅色自动适配）
+- React 侧注入链路：
+  - src/cove/utils/worldbook.ts（新建）：collectWorldbook(friendName, scanTexts) ——
+    读 AppleAI 库两张表，范围语义：global=直出；local=关键词命中近期会话(扫描窗口)；
+    exclusive=书.bound 含当前角色名+关键词命中；命中条目按优先级降序、上限24条/6000字，
+    按插入位置聚合为 before/after 两个【世界书设定】文本块
+  - src/cove/utils/ai.ts：systemPrompt/aiStream 增加 lore 参数——before 块置于 System
+    Prompt 最前（LOCK_PROMPT 之前），after 块紧跟角色定义块（记忆/规则之前）
+  - src/cove/pages/Chat.tsx：respond() 调 aiStream 前 collectWorldbook(friend.name,
+    history.slice(-6))，try/catch 包裹失败不阻断聊天
+- 端到端验证（agent-browser + fetch 探针拦截请求体 + VLM 截图分析）：
+  - 主屏「世界书」图标渲染（网格末位第13个，存量布局自动补齐）✓；VLM 确认绿书图标位置正常
+  - 四层 UI 全链路：新建对话框(名称+范围)→创建直进条目页→新建条目(名称/关键词/优先级/
+    插入位置)→保存回列表→返回根页统计刷新(条目:1·关键词:3) ✓；数据跨刷新持久 ✓
+  - 绑定角色：sheet 显示林小夏/陈默/苏晴（读信息APP好友）、勾选苏晴→完成→
+    UI 与 DB bound 一致 ✓
+  - AI 注入（林小夏/陈默两聊天会话 + 请求体探针）：
+    local+关键词命中 → lore 注入且在角色定义之前 ✓；local+全新会话无关键词 → 不注入 ✓；
+    local+前一条消息含关键词 → 注入（会话扫描窗口语义）✓；global+无关键词 → 注入 ✓；
+    exclusive+未绑定角色+关键词命中 → 不注入 ✓；exclusive+绑定陈默+关键词 → 注入 ✓；
+    position=after → 注入在 LOCK_PROMPT 与「你是陈默」之后 ✓
+  - VLM 四屏确认：条目列表页、编辑条目页(全部字段)、根页、新建对话框、390x844 移动端
+    （窗口铺满无错位）均无布局问题；控制台零模块错误（仅测试脚本伪造事件的2条探测报错）；
+    lint 0 error（3条既有 warning）；dev.log 全 200
+
+Stage Summary:
+- 世界书功能完整落地：壳层原生JS四层管理界面 + IndexedDB(worldbooks/wbentries) 存储 +
+  信息APP聊天发送时读取匹配并按「角色定义之前/之后」注入 System Prompt
+- 范围三语义（全局直出/局部关键词+当前会话扫描/专属绑定角色）全部端到端实测通过；
+  优先级排序、24条/6000字上限、注入失败不阻断聊天
+- 修改文件：public/ios/js/core/db.js、core/icons.js、core/home.js、js/main.js、index.html、
+  css/modules/worldbook.css（新）、js/modules/worldbook.js（新）、
+  src/cove/utils/worldbook.ts（新）、src/cove/utils/ai.ts、src/cove/pages/Chat.tsx
