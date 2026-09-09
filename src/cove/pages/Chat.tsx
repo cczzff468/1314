@@ -8,7 +8,7 @@ import { collectWorldbook } from '../utils/worldbook'
 import { friendMemoryContext, maybeAutoSummarize } from '../utils/memory'
 import { fileToAvatar, fileToPhoto } from '../utils/image'
 import { formatMoney } from '../utils/qr'
-import { VoiceRecorder, WebSpeechRecognizer, sttErrorMsg, warmupMic } from '../utils/asr'
+import { VoiceRecorder, WebSpeechRecognizer, sttErrorMsg, warmupMic, isEngineDeadCode } from '../utils/asr'
 
 interface MenuPos {
   x: number
@@ -528,8 +528,10 @@ export default function Chat({
 
   /* 引擎一：浏览器 Web Speech API（实时转写）。识别器内部为连续会话：
      no-speech 超时/断句后自动换新实例续听，不会因犹豫未开口而误报；
-     失败（network/音频不可用等）自动回退服务端识别 */
-  const startWebVoice = (lang: string, allowFallback: boolean) => {
+     引擎不可用类错误（network/启动失败/音频流没建立等——常见于网络
+     访问不了浏览器语音服务）则无条件回退服务端识别并告知用户，
+     哪怕用户显式选了 Web Speech 引擎：死引擎没得选，能用最重要 */
+  const startWebVoice = (lang: string) => {
     const ws = new WebSpeechRecognizer(lang)
     wsRef.current = ws
     setListening(true)
@@ -550,14 +552,14 @@ export default function Chat({
       })
       .catch((err: { code?: string }) => {
         const code = err?.code || 'unknown'
-        if (allowFallback && (code === 'network' || code === 'start-failed' || code === 'unsupported' || code === 'audio-unavailable')) {
+        if (isEngineDeadCode(code)) {
           fellBack = true
           setInterim('')
           if (wsRef.current === ws) wsRef.current = null
           setListening(false)
           showHint(
             code === 'audio-unavailable'
-              ? '麦克风音频不可用，改用录音识别重试…'
+              ? '浏览器语音引擎无法启动，已改用服务端识别'
               : '浏览器引擎不可用，已切换服务端识别'
           )
           startServerVoice()
@@ -632,7 +634,7 @@ export default function Chat({
           )
           return
         }
-        startWebVoice(voice.sttLang || 'zh-CN', engine === 'auto')
+        startWebVoice(voice.sttLang || 'zh-CN')
       }).finally(() => {
         warmRef.current = false
       })

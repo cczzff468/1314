@@ -78,10 +78,29 @@ export function sttErrorMsg(code: string): string {
     case 'no-speech':
       return '没有听到声音，请靠近麦克风再试'
     case 'audio-unavailable':
-      return '未捕获到麦克风声音：页面可能嵌在框架里被限制了麦克风，建议新标签页打开后重试'
+      /* 上下文感知：真嵌在 iframe 里才提示框架限制；顶层页面（部署环境
+         常见）则大概率是网络访问不了浏览器语音服务（大陆网络典型，
+         Chrome 语音引擎会秒级静默结束、连 error 都不报） */
+      return typeof window !== 'undefined' && window !== window.top
+        ? '未捕获到麦克风声音：页面嵌在框架里被限制了麦克风，建议新标签页打开后重试'
+        : '浏览器语音引擎无法启动：可能是网络无法访问浏览器语音服务，建议改用「服务端识别」引擎'
     default:
       return '语音识别失败，请重试'
   }
+}
+
+/** 是否为「引擎不可用」类错误（网络不通 / 启动失败 / 不支持 / 音频
+    流没建立）——这类错误下 Web Speech 已无济于事，应无条件回退服务端
+    识别（即使用户显式选择了 Web Speech 引擎），并在提示中告知原因；
+    权限类（not-allowed 等）与无设备（audio-capture）不属此类，服务端
+    引擎同样会失败，给用户明确报错即可 */
+export function isEngineDeadCode(code: string): boolean {
+  return (
+    code === 'network' ||
+    code === 'start-failed' ||
+    code === 'unsupported' ||
+    code === 'audio-unavailable'
+  )
 }
 
 /* 麦克风权限热身：先显式 getUserMedia 触发浏览器权限弹窗并确认设备可用，

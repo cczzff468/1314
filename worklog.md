@@ -1088,3 +1088,55 @@ Stage Summary:
   src/cove/pages/VoiceApiPage.tsx
 - 用户部署环境注意项已写入设置页文案：需 HTTPS、首次使用点「允许」
   权限弹窗
+
+---
+Task ID: 26
+Agent: Z.ai Code (main)
+Task: 修复「浏览器引擎测试失败：未捕获到麦克风声音」死胡同报错——
+引擎不可用时无条件回退服务端识别
+
+Work Log:
+- 用户报错：设置页选 Web Speech 引擎测试 → 「测试失败：浏览器引擎
+  测试失败：未捕获到麦克风声音：页面可能嵌在框架里被…」
+- 诊断（与用户贴的 iframe 分析不同）：报错走 throw 分支说明
+  engine='webspeech'（显式选择）；能走到引擎启动说明 warmupMic 的
+  getUserMedia 已通过——麦克风权限/设备没问题；用户部署的 iframe 链
+  全部同源（同源不受跨域 Permissions-Policy 限制）。真正根因：
+  Chrome 语音引擎本身起不来（典型：大陆网络访问不了浏览器语音服务，
+  引擎秒级静默结束连 error 都不报 → 3 次秒空 → audio-unavailable），
+  而旧逻辑在显式 webspeech 模式下不回退 → 死胡同报错
+- src/cove/utils/asr.ts：
+  · sttErrorMsg('audio-unavailable') 上下文感知：window !== top
+    （真嵌 iframe）才提示框架限制；顶层页面提示「浏览器语音引擎
+    无法启动：可能是网络无法访问浏览器语音服务，建议改用服务端识别」
+  · 新增导出 isEngineDeadCode(code)：network/start-failed/
+    unsupported/audio-unavailable =「引擎不可用」类；权限/无设备
+    不算（服务端引擎同样会失败，应给用户明确报错）
+- src/cove/pages/Chat.tsx：startWebVoice 移除 allowFallback 参数，
+  引擎不可用类错误无条件回退服务端识别（哪怕用户显式选了 Web
+  Speech），toast「浏览器语音引擎无法启动，已改用服务端识别」
+- src/cove/pages/VoiceApiPage.tsx：
+  · testStt 同样无条件回退（不依赖 engine==='auto'），结果提示
+    「测试通过（已回退服务端识别）：…；建议引擎改用「服务端」或
+    「自动」」
+  · 新增 showResult（6 秒长效提示）用于测试结果，避免结果一闪
+    而过（原 hint 仅 1.8 秒）；showHint/showResult 互斥清理定时器
+  · 引擎说明文案更新
+- agent-browser 验证（完整复现用户场景，引擎=webspeech）：
+  · 设置页：热身通过 → 引擎 3 次秒级死亡 → 自动回退 →「正在录音…」
+    → /api/asr 调用 →「测试通过（已回退服务端识别）：服务端识别
+    成功；建议引擎改用「服务端」或「自动」」；不再出现旧死胡同报错 ✓
+  · 聊天页：点麦克风 → 死引擎 3 次检测 → toast「浏览器语音引擎
+    无法启动，已改用服务端识别」→ 服务端录音接管（gUM=2、
+    MediaRecorder 构造）✓
+- lint 0 error；dev.log 全 200
+
+Stage Summary:
+- 用户场景根因：不是 iframe（部署链路同源且 warmup 已过），而是
+  Chrome 语音引擎不可用（大陆网络典型）；旧逻辑显式 webspeech 不
+  回退造成死胡同
+- 修复策略：引擎不可用类错误一律回退服务端识别并告知原因+建议；
+  audio-unavailable 提示按「是否真在 iframe」区分文案；测试结果
+  提示延长至 6 秒
+- 修改文件：src/cove/utils/asr.ts、src/cove/pages/Chat.tsx、
+  src/cove/pages/VoiceApiPage.tsx

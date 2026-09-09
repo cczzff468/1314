@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavBar, Modal } from '../components/common'
 import { loadApiSetting, saveApiSetting, uid } from '../store'
 import { testTtsConnection } from '../utils/apiTest'
-import { VoiceRecorder, WebSpeechRecognizer, sttErrorMsg, warmupMic } from '../utils/asr'
+import { VoiceRecorder, WebSpeechRecognizer, sttErrorMsg, warmupMic, isEngineDeadCode } from '../utils/asr'
 import type { ApiSetting, VoiceConfig } from '../types'
 
 const PROVIDER_LIST = ['OpenAI', 'Minimax 国内版', 'Minimax 国际版', '本地免费 (Edge TTS)']
@@ -141,6 +141,7 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
     return PROVIDER_VOICES[provider] ?? []
   }
   const hintTimer = useRef<number>(0)
+  const resultTimer = useRef<number>(0)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const update = (patch: Partial<ApiSetting>) => {
@@ -158,7 +159,16 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
   const showHint = (t: string) => {
     setHint(t)
     window.clearTimeout(hintTimer.current)
+    window.clearTimeout(resultTimer.current)
     hintTimer.current = window.setTimeout(() => setHint(''), 1800)
+  }
+
+  /* 测试结果类提示：展示更久（6 秒），避免结果一闪而过看不清 */
+  const showResult = (t: string) => {
+    setHint(t)
+    window.clearTimeout(hintTimer.current)
+    window.clearTimeout(resultTimer.current)
+    resultTimer.current = window.setTimeout(() => setHint(''), 6000)
   }
 
   const configs = cfg.voice.configs
@@ -327,8 +337,10 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
     }
   }
 
-  /* 测试语音输入：按所选引擎测试——auto 先测浏览器 Web Speech API，
-     失败自动回退服务端识别并标注实际生效引擎；不弹新标签页，页面内直接测试 */
+  /* 测试语音输入：按所选引擎测试——先测浏览器 Web Speech API，
+     引擎不可用（网络屏蔽/无法启动等，即使显式选了 Web Speech）
+     无条件自动回退服务端识别并标注实际生效引擎与建议；
+     不弹新标签页，页面内直接测试 */
   const testStt = async () => {
     if (sttTesting) return
     setSttTesting(true)
@@ -336,9 +348,10 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
     const wantWeb = engine !== 'server' && WebSpeechRecognizer.supported()
     try {
       if (wantWeb) {
+        let engineDead: string | null = null
         try {
           const text = await runWebSttTest(cfg.voice.sttLang || 'zh-CN')
-          showHint(
+          showResult(
             text
               ? `测试通过（浏览器 Web Speech）：${text.slice(0, 24)}${text.length > 24 ? '…' : ''}`
               : '没有听到内容：请靠近麦克风再说一次'
@@ -346,22 +359,25 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
           return
         } catch (err) {
           const code = (err as { code?: string })?.code || 'unknown'
-          if (engine !== 'auto' || !(code === 'network' || code === 'start-failed' || code === 'audio-unavailable')) {
+          /* 权限/无设备等硬错误直接报错（服务端引擎同样会失败）；
+             引擎不可用类错误无条件回退服务端测试 */
+          if (!isEngineDeadCode(code)) {
             throw new Error(`浏览器引擎测试失败：${sttErrorMsg(code)}`)
           }
-          showHint(
-            code === 'audio-unavailable'
-              ? '麦克风音频不可用，自动改用录音识别测试…'
-              : '浏览器引擎不可用，自动改用服务端识别测试…'
-          )
+          engineDead = code
         }
+        showHint(
+          engineDead === 'audio-unavailable'
+            ? '浏览器语音引擎无法启动，改用录音识别测试…'
+            : '浏览器引擎不可用，改用服务端识别测试…'
+        )
       } else if (engine === 'webspeech') {
         throw new Error('当前浏览器不支持 Web Speech API，请改用自动或服务端引擎')
       }
       const text = await runServerSttTest()
-      showHint(
-        wantWeb && engine === 'auto'
-          ? `测试通过（已回退服务端识别）：${text.slice(0, 20)}${text.length > 20 ? '…' : ''}`
+      showResult(
+        wantWeb
+          ? `测试通过（已回退服务端识别）：${text.slice(0, 20)}${text.length > 20 ? '…' : ''}；建议引擎改用「服务端」或「自动」`
           : `测试通过（服务端识别）：${text.slice(0, 24)}${text.length > 24 ? '…' : ''}`
       )
     } catch (e) {
@@ -755,7 +771,7 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
           <div className="form-row">
             <span className="form-preview">
               {WebSpeechRecognizer.supported()
-                ? '本浏览器支持 Web Speech API：自动模式优先实时转写，失败自动回退服务端识别；连续聆听模式，没说话会一直等你开口，不会几秒就报「没听到」'
+                ? '本浏览器支持 Web Speech API：自动模式优先实时转写；引擎不可用（如网络无法访问浏览器语音服务）时无论选哪个都会自动回退服务端识别'
                 : '本浏览器不支持 Web Speech API：将使用服务端识别（录音后识别）'}
             </span>
           </div>
