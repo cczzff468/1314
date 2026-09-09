@@ -8,6 +8,7 @@ import { collectWorldbook } from '../utils/worldbook'
 import { friendMemoryContext, maybeAutoSummarize } from '../utils/memory'
 import { fileToAvatar, fileToPhoto } from '../utils/image'
 import { formatMoney } from '../utils/qr'
+import { VoiceRecorder } from '../utils/asr'
 
 interface MenuPos {
   x: number
@@ -313,6 +314,7 @@ export default function Chat({
   const [hint, setHint] = useState('')
   const [errModal, setErrModal] = useState<ErrModal | null>(null)
   const [listening, setListening] = useState(false)
+  const [recognizing, setRecognizing] = useState(false)
   const [interim, setInterim] = useState('')
   const [stickerOpen, setStickerOpen] = useState(false)
   const [plusOpen, setPlusOpen] = useState(false)
@@ -461,7 +463,7 @@ export default function Chat({
   const pressRef = useRef<number>(0)
   const busyRef = useRef(false)
   const transBusyRef = useRef(false)
-  const recogRef = useRef<any>(null)
+  const recRef = useRef<VoiceRecorder | null>(null)
   const msgsRef = useRef(messages)
   const hintTimer = useRef<number>(0)
 
@@ -490,87 +492,68 @@ export default function Chat({
   useEffect(
     () => () => {
       window.clearTimeout(pressRef.current)
-      try {
-        recogRef.current?.stop()
-      } catch {
-        /* ignore */
-      }
+      recRef.current?.abort()
     },
     []
   )
 
+  /* 停止录音 → 后端 ASR 识别 → 文字追加到输入框 */
   const stopVoice = () => {
-    try {
-      recogRef.current?.stop()
-    } catch {
-      /* ignore */
-    }
+    const rec = recRef.current
+    if (!rec) return
+    setListening(false)
+    setInterim('')
+    setRecognizing(true)
+    rec.stopAndRecognize()
+      .then((text) => {
+        setDraft((p) => (p + text).slice(0, 500))
+        showHint(`已识别：${text.slice(0, 12)}${text.length > 12 ? '…' : ''}`)
+      })
+      .catch((e: unknown) => {
+        showHint(String((e as Error)?.message || '识别失败，请重试').slice(0, 36))
+      })
+      .finally(() => {
+        setRecognizing(false)
+        if (recRef.current === rec) recRef.current = null
+      })
   }
 
+  /* 开始录音：不再用浏览器 SpeechRecognition（依赖 Google 服务，国内不可达），
+     改为 MediaRecorder 录音 + 后端 /api/asr 识别，项目内直接可用 */
   const startVoice = () => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (!SR) {
-      showHint('当前浏览器不支持语音识别，请用 Chrome 或 Edge')
-      return
-    }
     const voice = loadApiSetting().voice
     if (!voice.sttEnabled) {
       showHint('语音输入未开启，请在 设置-语音配置 中打开')
-      return
-    }
-    if (window.self !== window.top) {
-      const w = window.open(location.href, '_blank')
-      showHint(
-        w
-          ? '已在新标签页打开，语音输入请在新打开的页面中使用'
-          : '预览框架内无法使用麦克风，请点预览面板上方 Open in New Tab 打开新标签页'
-      )
       return
     }
     if (listening) {
       stopVoice()
       return
     }
-    try {
-      const r = new SR()
-      r.lang = voice.sttLang || 'zh-CN'
-      r.interimResults = true
-      r.maxAlternatives = 1
-      r.onresult = (e: any) => {
-        let fin = ''
-        let itm = ''
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const t = e.results[i][0].transcript
-          if (e.results[i].isFinal) fin += t
-          else itm += t
-        }
-        if (fin) setDraft((p) => (p + fin).slice(0, 500))
-        setInterim(itm)
-      }
-      r.onerror = (e: any) => {
-        const msg =
-          e.error === 'not-allowed' || e.error === 'service-not-allowed'
-            ? '麦克风权限被拒绝，请在浏览器地址栏允许麦克风'
-            : e.error === 'no-speech'
-              ? '没有听到说话'
-              : e.error === 'network'
-                ? '识别服务网络异常，当前网络可能无法连通语音服务器'
-                : e.error === 'audio-capture'
-                  ? '麦克风不可用或被占用，请检查后重试'
-                  : '识别出错，请再试一次'
-        showHint(msg)
-      }
-      r.onend = () => {
-        setListening(false)
-        setInterim('')
-        recogRef.current = null
-      }
-      r.start()
-      recogRef.current = r
-      setListening(true)
-    } catch {
-      showHint('无法启动语音识别')
+    if (recognizing) return
+    if (!VoiceRecorder.supported()) {
+      showHint('当前浏览器不支持录音，请用 Chrome 或 Edge')
+      return
     }
+    const rec = new VoiceRecorder()
+    rec.start()
+      .then(() => {
+        recRef.current = rec
+        setListening(true)
+        /* 录音上限 60 秒，到时自动停止并识别 */
+        window.setTimeout(() => {
+          if (recRef.current === rec) stopVoice()
+        }, 60000)
+      })
+      .catch((e: unknown) => {
+        recRef.current = null
+        const msg = String((e as Error)?.name || '') + ' ' + String((e as Error)?.message || '')
+        showHint(
+          /NotAllowed|Permission|denied|拒绝/i.test(msg)
+            ? '麦克风权限被拒绝：请在浏览器地址栏允许麦克风后重试'
+            : '无法启动录音，请检查麦克风后重试'
+        )
+      })
   }
 
   const commit = (next: Message[]) => {
@@ -1459,7 +1442,7 @@ export default function Chat({
         </div>
       ) : (
         <>
-          {listening && (
+          {(listening || recognizing) && (
             <div className="chat-voice-live">
               <span className="chat-voice-wave" aria-hidden="true">
                 <i />
@@ -1468,10 +1451,14 @@ export default function Chat({
                 <i />
                 <i />
               </span>
-              <span className="chat-voice-text">{interim || '正在聆听，请说话…'}</span>
-              <button className="chat-voice-stop" onClick={stopVoice}>
-                停止
-              </button>
+              <span className="chat-voice-text">
+                {recognizing ? '正在识别…' : interim || '正在聆听，请说话…'}
+              </span>
+              {listening && (
+                <button className="chat-voice-stop" onClick={stopVoice}>
+                  停止
+                </button>
+              )}
             </div>
           )}
           <div className="chat-input-bar">
@@ -1489,7 +1476,7 @@ export default function Chat({
               <input
                 className="chat-input"
                 type="text"
-                placeholder={listening ? '正在聆听…' : editMsg ? '修改这条消息' : 'iMessage信息'}
+                placeholder={listening || recognizing ? '正在聆听…' : editMsg ? '修改这条消息' : 'iMessage信息'}
                 value={draft}
                 maxLength={500}
                 onChange={(e) => setDraft(e.target.value)}
@@ -1499,7 +1486,7 @@ export default function Chat({
               />
               {!draft.trim() && !editMsg && !(friend.queuedSend && queuedCount > 0) && (
                 <button
-                  className={`chat-mic ${listening ? 'listening' : ''}`}
+                  className={`chat-mic ${listening ? 'listening' : ''} ${recognizing ? 'busy' : ''}`}
                   onClick={startVoice}
                   aria-label={listening ? '停止语音输入' : '语音输入'}
                 >

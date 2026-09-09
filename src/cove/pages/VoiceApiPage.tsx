@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavBar, Modal } from '../components/common'
 import { loadApiSetting, saveApiSetting, uid } from '../store'
 import { testTtsConnection } from '../utils/apiTest'
+import { VoiceRecorder } from '../utils/asr'
 import type { ApiSetting, VoiceConfig } from '../types'
 
 const PROVIDER_LIST = ['OpenAI', 'Minimax 国内版', 'Minimax 国际版', '本地免费 (Edge TTS)']
@@ -284,75 +285,38 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
 
   useEffect(() => stopAudio, [])
 
+  /* 测试语音输入：MediaRecorder 录 5 秒 → 后端 /api/asr 识别（z-ai 服务端），
+     不再用浏览器 SpeechRecognition（依赖 Google 语音服务，国内网络不可达），
+     也不弹新标签页——直接在当前页面内测试 */
   const testStt = async () => {
     if (sttTesting) return
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (!SR) {
-      showHint('当前浏览器不支持语音识别，请用 Chrome 或 Edge')
-      return
-    }
-    if (window.self !== window.top) {
-      const w = window.open(location.href, '_blank')
-      showHint(
-        w
-          ? '已在新标签页打开本页，请在新打开的页面里继续测试语音识别'
-          : '预览框架内无法测试，请点预览面板上方 Open in New Tab 在新标签页打开'
-      )
+    if (!VoiceRecorder.supported()) {
+      showHint('当前浏览器不支持录音，请用 Chrome 或 Edge')
       return
     }
     setSttTesting(true)
-    showHint('正在检查麦克风权限…')
+    const rec = new VoiceRecorder()
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      stream.getTracks().forEach((t) => t.stop())
-    } catch {
+      await rec.start()
+      showHint('正在录音，请说一句话（5 秒后自动停止并识别）…')
+      await new Promise((r) => setTimeout(r, 5000))
+      if (!rec.active) throw new Error('录音已中断')
+      const text = await rec.stopAndRecognize()
+      showHint(`测试通过，识别到：${text.slice(0, 24)}${text.length > 24 ? '…' : ''}`)
+    } catch (e) {
+      rec.abort()
+      const msg = String((e as Error)?.name || '') + ' ' + String((e as Error)?.message || '')
+      showHint(
+        /NotAllowed|Permission|denied|拒绝/i.test(msg)
+          ? '麦克风权限被拒绝：请在浏览器地址栏允许本页使用麦克风后重试'
+          : /NotFound|not found|设备/i.test(msg)
+            ? '未检测到麦克风设备：请插入麦克风或检查系统设置'
+            : /太短|没有录到/.test(msg)
+              ? '录音太短：点测试后请对麦克风说一句话'
+              : `测试失败：${String((e as Error)?.message || '未知错误').slice(0, 30)}`
+      )
+    } finally {
       setSttTesting(false)
-      showHint('麦克风不可用：请在浏览器设置里允许本页使用麦克风')
-      return
-    }
-    let got = false
-    let done = false
-    const finish = (msg: string) => {
-      if (done) return
-      done = true
-      setSttTesting(false)
-      showHint(msg)
-    }
-    const r = new SR()
-    r.lang = cfg.voice.sttLang || 'zh-CN'
-    r.interimResults = true
-    r.onresult = () => {
-      got = true
-    }
-    r.onerror = (e: any) => {
-      if (e.error === 'no-speech') return
-      const reason =
-        e.error === 'aborted'
-          ? '手机系统语音服务启动失败。手机浏览器的识别依赖系统语音服务（国内安卓设备常缺失或被限制），建议用电脑版 Chrome/Edge 测试；弹窗提示的悬浮窗冲突也可按提示关闭相关应用后重试'
-          : e.error === 'audio-capture'
-            ? '麦克风被其他应用占用，请关闭后重试'
-            : e.error === 'network'
-              ? '识别服务网络异常：浏览器语音识别需能访问其语音服务器，当前网络可能无法连通'
-              : e.error === 'not-allowed' || e.error === 'service-not-allowed'
-                ? '识别服务被拒绝：请在浏览器设置里允许麦克风'
-                : `测试失败：${e.error ?? '未知错误'}`
-      finish(reason)
-    }
-    r.onend = () => finish(got ? '测试通过：已识别到语音内容' : '识别服务正常，未检测到说话，测试通过')
-    const timer = window.setTimeout(() => {
-      try {
-        r.stop()
-      } catch {
-        /* ignore */
-      }
-    }, 6000)
-    r.addEventListener('end', () => window.clearTimeout(timer), { once: true })
-    try {
-      r.start()
-      showHint('麦克风正常，正在测试识别，请说一句话（6 秒内）…')
-    } catch {
-      window.clearTimeout(timer)
-      finish('无法启动识别，请稍后重试')
     }
   }
 
@@ -709,7 +673,7 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
             </div>
           </div>
           <div className="form-row">
-            <span className="form-preview">用浏览器内置识别，免费无需配置，识别结果实时显示</span>
+            <span className="form-preview">录音后由服务端识别，无需配置外部服务，页面内直接测试</span>
           </div>
           <div className="form-row">
             <button

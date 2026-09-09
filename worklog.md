@@ -869,3 +869,40 @@ Stage Summary:
 - 预览面板内点击语音测试/语音输入时自动在新标签页打开应用（window.open），
   配 toast 引导；被弹窗拦截时回退文字提示
 - 修改文件：src/cove/pages/VoiceApiPage.tsx（1 处）、src/cove/pages/Chat.tsx（1 处）
+
+---
+Task ID: 22
+Agent: main (Z.ai Code)
+Task: 语音识别改为后端 ASR（不弹新标签页、项目内直接测试、彻底修复识别不管用）
+
+Work Log:
+- 用户需求：① 不要自动弹新标签页，在项目内测试；② 语音识别不管用
+- 根因分析：浏览器原生 SpeechRecognition 依赖 Google 语音服务（国内网络不可达），
+  且预览 iframe 受权限策略限制——旧方案在真实部署环境也基本不可用
+- 新方案：MediaRecorder 录音 → 前端解码降采样 16kHz 单声道 WAV → POST /api/asr →
+  z-ai-web-dev-sdk（服务端）audio.asr.create 识别，完全不依赖浏览器语音服务
+- 新增 src/app/api/asr/route.ts：POST { audio: base64 } → { text }，
+  runtime nodejs、错误处理对齐 /api/chat 风格
+- 新增 src/cove/utils/asr.ts：VoiceRecorder 类（getUserMedia + MediaRecorder 录音、
+  60 秒上限在 Chat 层控制）、blobToWavBase64（decodeAudioData → 线性插值降采样
+  16k → 16bit PCM + 44 字节 WAV 头 → base64）、recognizeBase64（fetch /api/asr）
+- 改造 src/cove/pages/Chat.tsx：recogRef→recRef(VoiceRecorder)、新增 recognizing
+  状态、startVoice 改 getUserMedia+MediaRecorder（无 iframe 预检、无 window.open）、
+  stopVoice 停止→后端识别→文字追加输入框、语音条 UI 支持「正在识别…」态
+- 改造 src/cove/pages/VoiceApiPage.tsx：testStt 重写为录 5 秒→后端识别→
+  「测试通过，识别到：XXX」；移除 iframe 检测与 window.open；错误分类新增
+  NotFound（未检测到麦克风设备）；表单说明改「录音后由服务端识别…页面内直接测试」
+- 端到端验证：
+  - z-ai tts 生成「今天天气真不错，我们一起去公园散步吧」→ curl POST /api/asr
+    → 返回 {"text":"今天天气真不错，我们一起去公园散步吧"} 100% 准确 ✓
+  - agent-browser：聊天页点语音输入（headless 无麦克风）→「无法启动录音，
+    请检查麦克风后重试」不弹窗 ✓；语音配置页点测试连接 →「未检测到麦克风
+    设备：请插入麦克风或检查系统设置」页面内直接提示 ✓；GET /api/asr 端点 ✓
+  - dev.log POST /api/asr 全 200（识别 300-560ms）、lint 0 error
+- 测试产物已清理（/tmp wav 与请求 JSON）
+
+Stage Summary:
+- 语音识别链路重构：浏览器 SpeechRecognition（Google 依赖，国内不可用）→
+  MediaRecorder + 后端 z-ai ASR，项目页面内直接可用，不再弹新标签页
+- 新增文件：src/app/api/asr/route.ts、src/cove/utils/asr.ts；
+  修改文件：src/cove/pages/Chat.tsx、src/cove/pages/VoiceApiPage.tsx
