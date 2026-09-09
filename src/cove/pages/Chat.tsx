@@ -1267,7 +1267,7 @@ export default function Chat({
                             <span className="tf-card-note">{transferNote(m.transfer, m.from)}</span>
                           </span>
                         </div>
-                        <div className="tf-card-strip">微信转账</div>
+                        <div className="tf-card-strip">转账</div>
                       </div>
                     </div>
                   ) : (

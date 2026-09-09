@@ -5826,14 +5826,13 @@ button:disabled {
   width: 230px;
   border-radius: 10px;
   overflow: hidden;
-  background: #fff;
+  background: #fa9d3b;
 }
 .tf-card-body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 14px;
-  background: #fa9d3b;
+  padding: 16px 14px 7px;
   color: #fff;
 }
 .tf-card-icon {
@@ -5867,12 +5866,12 @@ button:disabled {
   text-overflow: ellipsis;
 }
 .tf-card-strip {
-  padding: 8px 12px 9px;
+  padding: 0 14px 13px;
   font-size: 11px;
-  color: #b2b2b2;
+  color: rgba(255, 255, 255, 0.85);
 }
 /* 已收款/已退还：整卡褪色（对齐真实微信领取后的淡化效果） */
-.tf-card.tf-done .tf-card-body {
+.tf-card.tf-done {
   background: #fde1c4;
 }
 .tf-card.tf-done .tf-card-icon,
@@ -5881,7 +5880,7 @@ button:disabled {
   color: #c87e2f;
 }
 .tf-card.tf-done .tf-card-strip {
-  color: #c8c8cd;
+  color: rgba(200, 126, 47, 0.72);
 }
 .rela-msg {
   display: flex;

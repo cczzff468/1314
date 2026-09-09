@@ -773,3 +773,37 @@ Stage Summary:
   状态文案）+ 白底灰字「微信转账」条；已收款/已退还自动褪色 #FDE1C4
 - 修改文件：src/cove/pages/Chat.tsx（卡片 JSX + transferNote 辅助函数）、
   src/cove/index.css（.tf-card 全家族样式重写 + .receipt-card.tf）
+
+---
+Task ID: 19
+Agent: main (Z.ai Code)
+Task: 转账卡片删除白色底条改为统一颜色，「微信转账」改为「转账」
+
+Work Log:
+- 用户需求：删除转账卡片下方白色区域、整卡统一颜色；「微信转账」文字改为「转账」
+- 定位当前结构（Task 18 的两段式）：.tf-card 白底容器 + .tf-card-body 橙体
+  #FA9D3B + .tf-card-strip 白底灰字(#B2B2B2)「微信转账」
+- 修改 src/cove/pages/Chat.tsx（1 处）：条带文字「微信转账」→「转账」
+- 修改 src/cove/index.css（3 处规则）：
+  - .tf-card：background #fff → #fa9d3b（整卡统一橙）
+  - .tf-card-body：删除自身 background（继承容器橙）、padding 底 16→7px
+  - .tf-card-strip：padding 8px 12px 9px → 0 14px 13px、color #b2b2b2 →
+    rgba(255,255,255,.85)（橙底半透明白字）
+  - .tf-done 褪色态：.tf-card.tf-done { background:#fde1c4 }（整卡褪色）、
+    strip 褪色色 rgba(200,126,47,.72)
+- agent-browser 实测（390x844，/?as=app）：
+  - 真实链路发两笔转账（¥8.88、¥66.60）均被 AI 苏晴秒退 → 意外获得两笔
+    已退还褪色态样本：cardBg=rgb(253,225,196) 整卡统一、strip「转账」、无白区 ✓
+  - IndexedDB(ios-im/kv) 注入好友 ¥52 待收款消息 → reload 后：
+    cardBg=rgb(250,157,59)（#FA9D3B 统一橙）、230x91、strip=「转账」、
+    stripColor=rgba(255,255,255,.85)、note=「请收款」✓
+  - VLM 双态视觉审查：待收款「统一橙色无白色底条、布局正常」；已退还
+    「统一浅橙、文字依次 ¥66.60/已被退还/转账、无布局异常」✓
+- 测试数据清理：删 5 条测试消息（2 转账+2 退还回执+1 注入）、4 条测试账单，
+  余额 718.66 未变（两笔均被退还自动回补）、消息 18→13、账单 5→1
+- lint 0 error（3 条既有 warning 基线不变）、dev.log 全 200、页面无 console error
+
+Stage Summary:
+- 转账卡片由「橙体+白底灰字微信转账条」两段式改为单段统一橙色 #FA9D3B
+  （已收款/已退还整卡褪色 #FDE1C4），底部小字改为「转账」白字 85% 透明度
+- 修改文件：src/cove/pages/Chat.tsx（1 处）、src/cove/index.css（3 处规则）
