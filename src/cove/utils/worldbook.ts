@@ -83,6 +83,17 @@ function getAll(db: IDBDatabase, store: string): Promise<WbBook[] | WbEntry[]> {
   })
 }
 
+/* 世界书使用规则：注入 System Prompt 时告知 AI 这些文字是什么、怎么用，
+   避免被当成用户说的话来回应 */
+const WB_RULES =
+  '【世界书使用规则】\n' +
+  '以下内容是当前对话相关的背景设定和知识库，用【世界书条目】标记。\n\n' +
+  '当用户的问题涉及相关话题时，你应该：\n' +
+  '1. 优先参考这些设定来回答问题\n' +
+  '2. 不要复述或解释这些设定本身\n' +
+  '3. 自然地融入回答中，就像你本来就知道这些信息\n\n' +
+  '如果不确定某条设定是否适用于当前问题，以用户最新说的话为准。'
+
 /**
  * 收集本次对话应注入的世界书内容。
  * @param friendName 当前聊天角色名（用于专属范围绑定判断）
@@ -108,7 +119,7 @@ export async function collectWorldbook(friendName: string, scanTexts: string[]):
       return kws.some((k) => hay.includes(k))
     }
 
-    const matched: { priority: number; position: 'before' | 'after'; content: string }[] = []
+    const matched: { priority: number; position: 'before' | 'after'; name: string; content: string }[] = []
     for (const book of books) {
       if (!book || !book.id || book.enabled === false) continue
       const scope = book.scope === 'local' || book.scope === 'exclusive' ? book.scope : 'global'
@@ -124,6 +135,7 @@ export async function collectWorldbook(friendName: string, scanTexts: string[]):
           matched.push({
             priority: Number(e.priority) || 0,
             position: e.position === 'before' ? 'before' : 'after',
+            name: String(e.name ?? '').trim(),
             content,
           })
         }
@@ -131,6 +143,7 @@ export async function collectWorldbook(friendName: string, scanTexts: string[]):
     }
 
     if (matched.length === 0) return empty
+    /* 高优先级的条目放在前面 */
     matched.sort((a, b) => b.priority - a.priority)
 
     /* 按优先级截断 */
@@ -142,10 +155,11 @@ export async function collectWorldbook(friendName: string, scanTexts: string[]):
       chars += m.content.length
     }
 
+    /* 组装：使用规则在前，命中条目逐条带标题在后（【世界书条目 - 名称】增强 AI 理解） */
     const fmt = (list: typeof matched): string =>
       list.length
-        ? `【世界书设定】以下是本对话的世界观背景设定，与角色设定同属真实设定，必须严格遵守：\n${list
-            .map((m) => m.content)
+        ? `${WB_RULES}\n\n${list
+            .map((m) => `${m.name ? `【世界书条目 - ${m.name}】` : '【世界书条目】'}\n${m.content}`)
             .join('\n\n')}`
         : ''
 

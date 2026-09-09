@@ -403,3 +403,41 @@ Stage Summary:
   不影响其他 APP 的弹层配色
 - 修改文件：public/ios/js/core/ui.js、js/modules/worldbook.js、css/modules/worldbook.css、
   src/cove/pages/ChatSettings.tsx、src/cove/index.css
+
+---
+Task ID: 10
+Agent: Z.ai Code (主控)
+Task: 专属界面联系人下拉与「我的世界书库」标题同行右对齐 + 世界书注入 System Prompt 改为规范格式（使用规则块 + 条目标题 + 优先级）
+
+Work Log:
+- worldbook.js：联系人下拉从导航栏 right 移入 wb-hero（新增 .wb-hero-row 包裹标题+下拉胶囊），
+  仅专属筛选时显示；applyStats 改在 body 内查找 .wb-ctbtn（原 nav 侧查询作废）；
+  按钮绑定 haptic + pickContact()，aria-label 保留
+- worldbook.css：.wb-hero-row flex/space-between（标题左、胶囊右、垂直居中）；
+  .wb-ctbtn 从 nav-btn 附属样式改为独立胶囊（30px 高、15px 圆角、rgba(120,120,128,.14) 灰底、
+  0.5px 内描边、按压 scale(.94)，深浅色模式通用）；补回误删的 .wb-hero-sub
+- src/cove/utils/worldbook.ts：注入格式重构 —— 新增 WB_RULES 常量（【世界书使用规则】
+  四条规则：优先参考/不复述解释/自然融入/以用户最新发言为准）；fmt 改为
+  「WB_RULES + 空行 + 逐条条目」结构，每条带标题【世界书条目 - 名称】（无名称退化为
+  【世界书条目】）；matched 补 name 字段；保留高优先级在前排序与 24条/6000字上限
+- 端到端验证（agent-browser + fetch 探针 + VLM + 真模型回放）：
+  - 标题行对齐：专属筛选 → 下拉出现于「我的世界书库」右侧同行（桌面 sameRow=true、
+    右缘=行右缘；390x844 移动端标题 x=20 / 下拉右缘 370=390-20 对称、无溢出）✓
+  - 下拉交互：选「苏晴」→ 标签+列表过滤只剩「苏晴专属设定」；选「林小夏」→ 空态
+    「「林小夏」暂无专属世界书」；切回「全部」→ 下拉隐藏 ✓
+  - VLM 截图确认：胶囊与标题同行垂直居中、无错位溢出、全黑白灰无蓝色；深色模式
+    下拉白字 rgb(255,255,255) + 灰底正常 ✓
+  - 注入格式探针：React 信息APP（/?as=app）苏晴会话发送含「上海+暗号」消息 →
+    捕获 /api/chat 请求体 → System Prompt 含完整【世界书使用规则】块 +
+    【世界书条目 - 城市设定】(优先级200) 在 【世界书条目 - 秘密暗号】(优先级100) 之前 +
+    位置在角色定义之后 ✓；第二次发送回归同样命中 ✓
+  - 真模型行为回放：把捕获的 System Prompt+消息直接 POST /api/chat（内置AI）→
+    回复「玫瑰啊！你怎么突然要上海来…」——自然使用设定、不追问出处、不复述设定 ✓
+  - 控制台零错误、dev.log 全 200、lint 0 error（3条既有 warning）
+
+Stage Summary:
+- 联系人下拉移到标题行右对齐（含移动端/深色适配），专属视角过滤交互回归通过
+- 世界书 System Prompt 注入格式与用户规范完全一致：使用规则块 + 带标题条目 + 优先级排序，
+  经 fetch 探针（线上格式）与真实模型（行为自然融入设定）双重验证
+- 修改文件：public/ios/js/modules/worldbook.js、public/ios/css/modules/worldbook.css、
+  src/cove/utils/worldbook.ts

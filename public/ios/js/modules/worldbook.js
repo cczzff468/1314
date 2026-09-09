@@ -68,18 +68,20 @@ export default {
 
 /* ============ 根页面：世界书管理（黑白灰 · 统计 + 筛选 + 开关列表） ============ */
 function makeRootPage() {
-  /* 专属视角：右上角联系人下拉（仅在筛选「专属」时出现） */
-  const ctBtn = navBtn(`<span class="wb-ct-name">全部角色</span>${CHEV_DOWN_SVG}`, () => pickContact(), 'pill-btn wb-ctbtn');
-  ctBtn.style.display = 'none';
   const page = nav.makePage({
     title: '世界书',
     className: 'wb-page',
-    right: [ctBtn, navBtn(PLUS_SVG, () => newBook(), 'pill-btn')],
+    right: [navBtn(PLUS_SVG, () => newBook(), 'pill-btn')],
     async build(body, pageEl) {
       body.classList.add('wb-body');
       body.innerHTML = `
         <div class="wb-hero">
-          <div class="wb-hero-title">我的世界书库</div>
+          <div class="wb-hero-row">
+            <div class="wb-hero-title">我的世界书库</div>
+            <button type="button" class="wb-ctbtn" id="wb-ctbtn" style="display:none" aria-label="选择角色查看专属世界书">
+              <span class="wb-ct-name">全部角色</span>${CHEV_DOWN_SVG}
+            </button>
+          </div>
           <div class="wb-hero-sub" id="wb-stat"></div>
         </div>
         <div class="wb-stats" id="wb-stats">
@@ -97,6 +99,9 @@ function makeRootPage() {
           </button>
         </div>
         <div id="wb-list"></div>`;
+
+      /* 专属视角：联系人下拉胶囊（与「我的世界书库」标题同行、右对齐） */
+      body.querySelector('#wb-ctbtn').onclick = () => { haptic(4); pickContact(); };
 
       /* 范围筛选：常驻页面底部（跟随根页，不随内容滚动） */
       const filterbar = el('div', 'wb-filterbar');
@@ -214,8 +219,8 @@ function applyStats(body, books, entries, statEl) {
   const pageEl = body.closest('.nav-page') || body;
   pageEl.querySelectorAll('.wb-chip').forEach(c => c.classList.toggle('on', c.dataset.f === curScope));
 
-  /* 专属视角：右上角联系人下拉（仅专属筛选时显示；同步当前选择名） */
-  const ctBtn = pageEl.querySelector('.wb-ctbtn');
+  /* 专属视角：标题行右侧联系人下拉（仅专属筛选时显示；同步当前选择名） */
+  const ctBtn = body.querySelector('.wb-ctbtn');
   if (ctBtn) {
     ctBtn.style.display = curScope === 'exclusive' ? '' : 'none';
     const nm = ctBtn.querySelector('.wb-ct-name');
