@@ -154,14 +154,6 @@ export default function WalletHome({
           ))}
         </div>
 
-        <div className="wallet-footer">
-          <span className="wallet-shield">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-              <path d="M12 3.5 5.5 6v5c0 4.2 2.7 7.4 6.5 9.5 3.8-2.1 6.5-5.3 6.5-9.5V6L12 3.5Z" stroke="#9aa4b2" strokeWidth="1.6" strokeLinejoin="round" />
-            </svg>
-          </span>
-          微信安全支付
-        </div>
         <button className="wallet-pwd-link" onClick={onOpenPassword}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
             <rect x="5" y="10.5" width="14" height="9" rx="2.4" stroke="currentColor" strokeWidth="1.7" />

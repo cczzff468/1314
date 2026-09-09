@@ -670,3 +670,37 @@ Stage Summary:
 - 钱包页信息架构微调完成：账单升为导航级入口（右上角文字按钮，微信蓝灰），
   支付密码下沉为页脚附属入口（安全支付语下方，低调灰），服务列表精简为 4 行
 - 修改文件：src/cove/pages/wallet/WalletHome.tsx、src/cove/index.css
+
+---
+Task ID: 16
+Agent: Z.ai Code (主控)
+Task: ①删除钱包页「微信安全支付」页脚文字 ②修复矮视口下部分服务选择被裁剪看不见、页面无法滚动的问题（钱包下界面可滑动）
+
+Work Log:
+- WalletHome.tsx：删除 .wallet-footer 块（盾图标 + 微信安全支付文字），服务列表下方
+  直接接「支付密码」入口；.wallet-footer/.wallet-shield CSS 保留（PayPasswordSet 页
+  仍在用），.wallet-pwd-link 上边距 2→8px 补偿页脚移除后的间距
+- 裁剪根因定位（375x667 实测复现）：.wallet-page .page-body 为纵向 flex（6774 全局组
+  规则），矮视口下内容超高时子项默认 flex-shrink:1 被压缩 —— .wallet-services
+  clientH 180 vs scrollH 242，「银行卡」整行被 overflow:hidden 裁掉完全不可见，且
+  收缩吞掉溢出（overflow=0）导致 page-body 无法滚动；与 Task 14 开通按钮属同一 bug 族
+- 修复（index.css）：flex 纵向 page-body 的直接子项统一 flex-shrink:0
+  （覆盖 paycode/receivecode/scan/rp/fund/wallet/change 七页）—— 子项保持自然高度，
+  超高时由 page-body 的 overflow-y:auto 正常滚动；change 页 .change-bottom 的
+  margin-top:auto 底部锚定不受影响
+- 逐页实测（agent-browser 375x667 + 390x844 双视口 + 滚动验证 + VLM）：
+  - 钱包页 375x667：列表 0 裁剪、页面可滚 62px、滚动后银行卡行/支付密码完全可见 ✓；
+    390x844：无溢出无裁剪、4 行 + 支付密码全部直接可见、布局不变 ✓
+  - 零钱页：充值/提现按钮可见（overflow 0 无裁剪）✓；零钱通主页：overflow 4px
+    可滚动、页脚可达 ✓；付款码/收款码：无裁剪 ✓；银行卡表单页（block 布局）：
+    262px 滚动正常、颜色盘/保存可达 ✓；亲属卡「选择对象」弹窗：好友列表 162px
+    全可见（自带 max-height 滚动）✓
+  - 交互回归：右上角账单 → 账单页 7 chips 全可见 ✓；支付密码 → 密码设置页 ✓
+  - VLM 四项确认：无微信安全支付字样、账单按钮正常、4 行完整无裁剪、无重叠溢出
+  - 控制台零错误、lint 0 error（3条既有 warning）、dev.log 全 200
+
+Stage Summary:
+- 钱包页脚「微信安全支付」删除，支付密码入口上移直接跟随服务列表
+- 关键修复：七类 flex 纵向 page-body 子项禁 flex-shrink —— 彻底解决矮视口下
+  服务行/底部内容被裁剪且不可滚动的 bug 族（含 Task 14 同根因的泛化收尾）
+- 修改文件：src/cove/pages/wallet/WalletHome.tsx、src/cove/index.css

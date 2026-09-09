@@ -4809,13 +4809,13 @@ button:disabled {
   font-weight: 500;
   color: #576b95;
 }
-/* 「微信安全支付」下方的「支付密码」入口 */
+/* 服务列表下方的「支付密码」入口 */
 .wallet-pwd-link {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  margin: 2px auto 0;
+  margin: 8px auto 0;
   padding: 5px 12px;
   font-size: 12px;
   color: #9aa4b2;
@@ -6819,6 +6819,18 @@ button:disabled {
   display: block;
   width: 100%;
   border-radius: 999px;
+}
+/* 纵向 flex page-body 的子项禁止 flex-shrink 压缩：矮视口下内容超高时，
+   子项（如服务列表末行、底部按钮）会被 overflow:hidden 裁掉且页面无法滚动
+   （收缩吞掉溢出）——禁缩后保持自然高度，由 page-body 的 overflow-y:auto 滚动 */
+.paycode-page .page-body > *,
+.receivecode-page .page-body > *,
+.scan-page .page-body > *,
+.rp-page .page-body > *,
+.fund-page .page-body > *,
+.wallet-page .page-body > *,
+.change-page .page-body > * {
+  flex-shrink: 0;
 }
 
 /* 加号面板毛玻璃 */
