@@ -2,14 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavBar, Modal } from '../components/common'
 import { loadApiSetting, saveApiSetting, uid } from '../store'
 import { testTtsConnection } from '../utils/apiTest'
-import {
-  VoiceRecorder,
-  WebSpeechRecognizer,
-  sttErrorMsg,
-  warmupMic,
-  micPermissionState,
-  isEngineDeadCode,
-} from '../utils/asr'
+import { VoiceRecorder } from '../utils/asr'
 import type { ApiSetting, VoiceConfig } from '../types'
 
 const PROVIDER_LIST = ['OpenAI', 'Minimax 国内版', 'Minimax 国际版', '本地免费 (Edge TTS)']
@@ -318,82 +311,13 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
     }
   }
 
-  /* 浏览器 Web Speech API 引擎测试：权限已授予则直接启动（不经
-     getUserMedia，避免与引擎抢占设备）；首次使用先热身申请权限。
-     最多听 10 秒，识别器内部为连续会话：no-speech 超时会自动换新
-     实例续听，点测试后犹豫几秒再开口也不会误报「没有听到内容」 */
-  const runWebSttTest = async (lang: string): Promise<string> => {
-    const st = await micPermissionState()
-    if (st === 'denied') {
-      throw new Error('麦克风权限被拒：请在浏览器地址栏允许本页使用麦克风后重试')
-    }
-    if (st !== 'granted') {
-      const w = await warmupMic()
-      if (w !== 'ok') {
-        throw new Error(
-          w === 'denied'
-            ? '麦克风权限被拒：请在浏览器地址栏允许本页使用麦克风后重试'
-            : w === 'no-device'
-              ? '未检测到麦克风设备：请检查系统设置'
-              : w === 'insecure'
-                ? '当前环境不支持麦克风（需 HTTPS）'
-                : '麦克风不可用，请检查后重试'
-        )
-      }
-    }
-    const ws = new WebSpeechRecognizer(lang)
-    const timer = window.setTimeout(() => ws.stop(), 10000)
-    try {
-      showHint('正在聆听（浏览器 Web Speech API），请说一句话…')
-      return await ws.start()
-    } finally {
-      window.clearTimeout(timer)
-    }
-  }
-
-  /* 测试语音输入：按所选引擎测试——先测浏览器 Web Speech API，
-     引擎不可用（网络屏蔽/无法启动等，即使显式选了 Web Speech）
-     无条件自动回退服务端识别并标注实际生效引擎与建议；
-     不弹新标签页，页面内直接测试 */
+  /* 测试语音输入：录音 5 秒 → 服务端识别，页面内直接测试 */
   const testStt = async () => {
     if (sttTesting) return
     setSttTesting(true)
-    const engine = cfg.voice.sttEngine || 'auto'
-    const wantWeb = engine !== 'server' && WebSpeechRecognizer.supported()
     try {
-      if (wantWeb) {
-        let engineDead: string | null = null
-        try {
-          const text = await runWebSttTest(cfg.voice.sttLang || 'zh-CN')
-          showResult(
-            text
-              ? `测试通过（浏览器 Web Speech）：${text.slice(0, 24)}${text.length > 24 ? '…' : ''}`
-              : '没有听到内容：请靠近麦克风再说一次'
-          )
-          return
-        } catch (err) {
-          const code = (err as { code?: string })?.code || 'unknown'
-          /* 权限/无设备等硬错误直接报错（服务端引擎同样会失败）；
-             引擎不可用类错误无条件回退服务端测试 */
-          if (!isEngineDeadCode(code)) {
-            throw new Error(`浏览器引擎测试失败：${sttErrorMsg(code)}`)
-          }
-          engineDead = code
-        }
-        showHint(
-          engineDead === 'audio-unavailable'
-            ? '浏览器语音引擎无法启动，改用录音识别测试…'
-            : '浏览器引擎不可用，改用服务端识别测试…'
-        )
-      } else if (engine === 'webspeech') {
-        throw new Error('当前浏览器不支持 Web Speech API，请改用自动或服务端引擎')
-      }
       const text = await runServerSttTest()
-      showResult(
-        wantWeb
-          ? `测试通过（已回退服务端识别）：${text.slice(0, 20)}${text.length > 20 ? '…' : ''}；建议引擎改用「服务端」或「自动」`
-          : `测试通过（服务端识别）：${text.slice(0, 24)}${text.length > 24 ? '…' : ''}`
-      )
+      showResult(`测试通过（服务端识别）：${text.slice(0, 24)}${text.length > 24 ? '…' : ''}`)
     } catch (e) {
       const msg = String((e as Error)?.name || '') + ' ' + String((e as Error)?.message || '')
       showHint(
@@ -746,56 +670,8 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
             </button>
           </div>
           <div className="form-row">
-            <span className="form-label">识别语言</span>
-            <div className="seg-group">
-              {[
-                { key: 'zh-CN', label: '中文（普通话）' },
-                { key: 'en-US', label: '英文' },
-              ].map((it) => (
-                <button
-                  key={it.key}
-                  className={`seg-item ${(cfg.voice.sttLang || 'zh-CN') === it.key ? 'active' : ''}`}
-                  onClick={() => updateVoice({ sttLang: it.key })}
-                >
-                  {it.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="form-row">
-            <span className="form-label">识别引擎</span>
-            <div className="seg-group">
-              {(
-                [
-                  { key: 'auto', label: '自动' },
-                  { key: 'webspeech', label: 'Web Speech' },
-                  { key: 'server', label: '服务端' },
-                ] as const
-              ).map((it) => (
-                <button
-                  key={it.key}
-                  className={`seg-item ${(cfg.voice.sttEngine || 'auto') === it.key ? 'active' : ''}`}
-                  onClick={() => updateVoice({ sttEngine: it.key })}
-                >
-                  {it.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="form-row">
             <span className="form-preview">
-              {WebSpeechRecognizer.supported()
-                ? '本浏览器支持 Web Speech API：自动模式优先实时转写；引擎不可用（如网络无法访问浏览器语音服务）时无论选哪个都会自动回退服务端识别'
-                : '本浏览器不支持 Web Speech API：将使用服务端识别（录音后识别）'}
-            </span>
-          </div>
-          <div className="form-row">
-            <span className="form-preview">
-              测试/首次使用会请求麦克风权限（请点「允许」）；引擎不可用会自动回退服务端识别；可用
-              <a href="/ws-test.html" target="_blank" rel="noopener" style={{ color: 'inherit', textDecoration: 'underline' }}>
-                纯引擎自测页
-              </a>
-              单独验证浏览器语音引擎
+              点击麦克风开始说话，再点「停止」即出文字；识别由应用服务端完成，语言自动检测；首次使用会请求麦克风权限（请点「允许」）
             </span>
           </div>
           <div className="form-row">

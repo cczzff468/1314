@@ -8,14 +8,7 @@ import { collectWorldbook } from '../utils/worldbook'
 import { friendMemoryContext, maybeAutoSummarize } from '../utils/memory'
 import { fileToAvatar, fileToPhoto } from '../utils/image'
 import { formatMoney } from '../utils/qr'
-import {
-  VoiceRecorder,
-  WebSpeechRecognizer,
-  sttErrorMsg,
-  warmupMic,
-  micPermissionState,
-  isEngineDeadCode,
-} from '../utils/asr'
+import { VoiceRecorder } from '../utils/asr'
 
 interface MenuPos {
   x: number
@@ -322,7 +315,6 @@ export default function Chat({
   const [errModal, setErrModal] = useState<ErrModal | null>(null)
   const [listening, setListening] = useState(false)
   const [recognizing, setRecognizing] = useState(false)
-  const [interim, setInterim] = useState('')
   const [stickerOpen, setStickerOpen] = useState(false)
   const [plusOpen, setPlusOpen] = useState(false)
   const [myStickers, setMyStickers] = useState<Sticker[]>(() => loadStickers())
@@ -471,8 +463,6 @@ export default function Chat({
   const busyRef = useRef(false)
   const transBusyRef = useRef(false)
   const recRef = useRef<VoiceRecorder | null>(null)
-  const wsRef = useRef<WebSpeechRecognizer | null>(null)
-  const warmRef = useRef(false)
   const msgsRef = useRef(messages)
   const hintTimer = useRef<number>(0)
 
@@ -502,22 +492,15 @@ export default function Chat({
     () => () => {
       window.clearTimeout(pressRef.current)
       recRef.current?.abort()
-      wsRef.current?.abort()
     },
     []
   )
 
-  /* 停止语音：按当前引擎分发——Web Speech 停止后由 start() 的 promise 统一结算；
-     录音引擎则停止→后端识别 */
+  /* 停止语音：结束录音 → 后端识别 → 文字落输入框 */
   const stopVoice = () => {
-    if (wsRef.current) {
-      wsRef.current.stop()
-      return
-    }
     const rec = recRef.current
     if (!rec) return
     setListening(false)
-    setInterim('')
     setRecognizing(true)
     rec.stopAndRecognize()
       .then((text) => {
@@ -533,55 +516,7 @@ export default function Chat({
       })
   }
 
-  /* 引擎一：浏览器 Web Speech API（实时转写）。识别器内部为连续会话：
-     no-speech 超时/断句后自动换新实例续听，不会因犹豫未开口而误报；
-     引擎不可用类错误（network/启动失败/音频流没建立等——常见于网络
-     访问不了浏览器语音服务）则无条件回退服务端识别并告知用户，
-     哪怕用户显式选了 Web Speech 引擎：死引擎没得选，能用最重要 */
-  const startWebVoice = (lang: string) => {
-    const ws = new WebSpeechRecognizer(lang)
-    wsRef.current = ws
-    setListening(true)
-    setInterim('')
-    /* 60 秒上限，到时自动停止并结算 */
-    window.setTimeout(() => {
-      if (wsRef.current === ws) ws.stop()
-    }, 60000)
-    let fellBack = false
-    ws.start((text) => setInterim(text))
-      .then((text) => {
-        if (text) {
-          setDraft((p) => (p + text).slice(0, 500))
-          showHint(`已识别：${text.slice(0, 12)}${text.length > 12 ? '…' : ''}`)
-        } else {
-          showHint('没有听到内容，请靠近麦克风再试')
-        }
-      })
-      .catch((err: { code?: string }) => {
-        const code = err?.code || 'unknown'
-        if (isEngineDeadCode(code)) {
-          fellBack = true
-          setInterim('')
-          if (wsRef.current === ws) wsRef.current = null
-          setListening(false)
-          showHint(
-            code === 'audio-unavailable'
-              ? '浏览器语音引擎无法启动，已改用服务端识别'
-              : '浏览器引擎不可用，已切换服务端识别'
-          )
-          startServerVoice()
-          return
-        }
-        showHint(sttErrorMsg(code).slice(0, 36))
-      })
-      .finally(() => {
-        if (wsRef.current === ws) wsRef.current = null
-        setInterim('')
-        if (!fellBack) setListening(false)
-      })
-  }
-
-  /* 引擎二：MediaRecorder 录音 + 后端 /api/asr 识别，项目内直接可用 */
+  /* 语音输入（唯一引擎）：MediaRecorder 录音 + 后端 /api/asr 识别 */
   const startServerVoice = () => {
     if (recognizing) return
     if (!VoiceRecorder.supported()) {
@@ -609,12 +544,8 @@ export default function Chat({
       })
   }
 
-  /* 开始语音输入：按设置选引擎——auto=优先 Web Speech API（实时转写），
-     失败自动回退服务端识别；webspeech/server=指定引擎。
-     权限策略：已授予（permissions API 查询）→ 直接启动识别，完全不经
-     getUserMedia（避免开-关麦克风与引擎的设备交接窗口，Windows/蓝牙
-     设备上可能造成引擎拿不到音频流）；首次使用 → 热身触发权限弹窗；
-     已拒绝 → 直接提示，不做无谓尝试 */
+  /* 开始语音输入：点麦克风开始录音（首次会弹权限框），再点停止并识别。
+     录音上限 60 秒，到时自动停止 */
   const startVoice = () => {
     const voice = loadApiSetting().voice
     if (!voice.sttEnabled) {
@@ -625,43 +556,8 @@ export default function Chat({
       stopVoice()
       return
     }
-    if (recognizing || warmRef.current) return
-    const engine = voice.sttEngine || 'auto'
-    if (engine !== 'server' && WebSpeechRecognizer.supported()) {
-      warmRef.current = true
-      micPermissionState()
-        .then((st) => {
-          if (st === 'denied') {
-            showHint('麦克风权限被拒：请在浏览器地址栏允许麦克风后重试')
-            return
-          }
-          if (st === 'granted') {
-            startWebVoice(voice.sttLang || 'zh-CN')
-            return
-          }
-          return warmupMic().then((w) => {
-            if (w !== 'ok') {
-              showHint(
-                w === 'denied'
-                  ? '麦克风权限被拒：请在浏览器地址栏允许麦克风后重试'
-                  : w === 'no-device'
-                    ? '未检测到麦克风设备：请检查系统设置'
-                    : w === 'insecure'
-                      ? '当前环境不支持麦克风（需 HTTPS）：请用新标签页打开后重试'
-                      : '麦克风不可用，请检查后重试'
-              )
-              return
-            }
-            startWebVoice(voice.sttLang || 'zh-CN')
-          })
-        })
-        .finally(() => {
-          warmRef.current = false
-        })
-    } else {
-      if (engine === 'webspeech') showHint('当前浏览器不支持 Web Speech API，已改用服务端识别')
-      startServerVoice()
-    }
+    if (recognizing) return
+    startServerVoice()
   }
 
   const commit = (next: Message[]) => {
@@ -1560,7 +1456,7 @@ export default function Chat({
                 <i />
               </span>
               <span className="chat-voice-text">
-                {recognizing ? '正在识别…' : interim || '正在聆听，请说话…'}
+                {recognizing ? '正在识别…' : '正在录音，请说话…'}
               </span>
               {listening && (
                 <button className="chat-voice-stop" onClick={stopVoice}>

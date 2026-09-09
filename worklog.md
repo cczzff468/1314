@@ -1288,3 +1288,48 @@ Work Log:
 
 Stage Summary:
 - 概念澄清完成,无代码变更
+
+---
+Task ID: 32
+Agent: Z.ai Code (main)
+Task: 按用户要求「只用服务端识别，把其他的都删除」——移除浏览器
+Web Speech 引擎，语音输入收敛为单一服务端录音识别
+
+Work Log:
+- 用户在实测「浏览器语音引擎无法启动→自动回退录音识别→测试通过」
+  并理解架构后决定：仅保留服务端识别，删除其他引擎
+- src/cove/utils/asr.ts 重写（505→175 行）：删除 Web Speech 类型
+  声明、WebSpeechRecognizer、warmupMic、micPermissionState、
+  sttErrorMsg、isEngineDeadCode；仅保留 VoiceRecorder、
+  blobToWavBase64、recognizeBase64
+- src/cove/pages/Chat.tsx：删除 startWebVoice/引擎分支/回退逻辑/
+  wsRef/warmRef/interim 状态；startVoice → 直接 startServerVoice
+  （60s 上限、点停止识别落框不变）；语音条文案「正在录音，请说话…」
+- src/cove/pages/VoiceApiPage.tsx：删除 runWebSttTest、引擎/语言
+  选择器、Web Speech 说明与自测页链接；testStt = 录 5 秒 →
+  服务端识别 → 「测试通过（服务端识别）：…」；权限类错误提示保留
+- src/cove/types.ts：VoiceSetting 移除 sttLang/sttEngine（识别
+  语言由服务端自动检测，字段已无作用）；store.ts 默认值同步清理，
+  旧存量设置里的多余键在下次保存时自然丢弃（无需迁移）
+- 删除 public/ws-test.html；更新 ios 外壳两处过时注释
+- lint 0 error（3 条既有 warning）；dev.log 全 200（编辑中途的
+  瞬时 500 为热重滚先后保存窗口，最终态干净）
+- agent-browser 端到端验证（mock gUM/MediaRecorder/
+  decodeAudioData/拦截 /api/asr，并放置陷阱版 SpeechRecognition）：
+  · 设置页：无「识别引擎」「识别语言」「自测页」痕迹；测试连接 →
+    gUM=1、/api/asr=1、SR=0 →「测试通过（服务端识别）：服务端识别
+    成功」✓
+  · 聊天页：点麦克风 →「正在录音，请说话…」+ 停止按钮 → 点停止 →
+    「已识别：今天天气真不错」→ 文字落入输入框；gUM=1、/api/asr=1、
+    SR=0 ✓
+  · 浏览器无错误、无 hydration 报错；rg 确认全项目无引擎残留引用
+
+Stage Summary:
+- 语音输入现为单一引擎（服务端录音识别）：更简单、启动零试探、
+  在用户网络下实测可用；浏览器引擎及全部相关分支/设置/UI/自测页
+  已彻底移除（陷阱注入证明 SpeechRecognition 永不被调用）
+- 修改文件：src/cove/utils/asr.ts、src/cove/pages/Chat.tsx、
+  src/cove/pages/VoiceApiPage.tsx、src/cove/types.ts、
+  src/cove/store.ts、public/ios/js/modules/info.js、
+  public/ios/js/modules/settings.js；删除 public/ws-test.html
+- 用户设置无感迁移：sttEnabled 保留，旧 sttEngine/sttLang 键忽略

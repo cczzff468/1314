@@ -18,7 +18,7 @@ export default {
     frame.setAttribute('src', '/?as=app');
     frame.setAttribute('title', '信息');
     frame.setAttribute('scrolling', 'yes');
-    /* 麦克风权限策略：语音输入（Web Speech / getUserMedia）需要逐层 allow 传递 */
+    /* 麦克风权限策略：语音输入（getUserMedia 录音）需要逐层 allow 传递 */
     frame.setAttribute('allow', 'microphone');
     frame.style.cssText =
       'position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:#fff;';
