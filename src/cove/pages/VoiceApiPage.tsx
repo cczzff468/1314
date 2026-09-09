@@ -2,7 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { NavBar, Modal } from '../components/common'
 import { loadApiSetting, saveApiSetting, uid } from '../store'
 import { testTtsConnection } from '../utils/apiTest'
-import { VoiceRecorder, WebSpeechRecognizer, sttErrorMsg, warmupMic, isEngineDeadCode } from '../utils/asr'
+import {
+  VoiceRecorder,
+  WebSpeechRecognizer,
+  sttErrorMsg,
+  warmupMic,
+  micPermissionState,
+  isEngineDeadCode,
+} from '../utils/asr'
 import type { ApiSetting, VoiceConfig } from '../types'
 
 const PROVIDER_LIST = ['OpenAI', 'Minimax 国内版', 'Minimax 国际版', '本地免费 (Edge TTS)']
@@ -311,21 +318,28 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
     }
   }
 
-  /* 浏览器 Web Speech API 引擎测试：先热身申请麦克风权限，再最多听 10 秒。
-     识别器内部为连续会话：no-speech 超时会自动换新实例续听，
-     点测试后犹豫几秒再开口也不会误报「没有听到内容」 */
+  /* 浏览器 Web Speech API 引擎测试：权限已授予则直接启动（不经
+     getUserMedia，避免与引擎抢占设备）；首次使用先热身申请权限。
+     最多听 10 秒，识别器内部为连续会话：no-speech 超时会自动换新
+     实例续听，点测试后犹豫几秒再开口也不会误报「没有听到内容」 */
   const runWebSttTest = async (lang: string): Promise<string> => {
-    const w = await warmupMic()
-    if (w !== 'ok') {
-      throw new Error(
-        w === 'denied'
-          ? '麦克风权限被拒：请在浏览器地址栏允许本页使用麦克风后重试'
-          : w === 'no-device'
-            ? '未检测到麦克风设备：请检查系统设置'
-            : w === 'insecure'
-              ? '当前环境不支持麦克风（需 HTTPS）'
-              : '麦克风不可用，请检查后重试'
-      )
+    const st = await micPermissionState()
+    if (st === 'denied') {
+      throw new Error('麦克风权限被拒：请在浏览器地址栏允许本页使用麦克风后重试')
+    }
+    if (st !== 'granted') {
+      const w = await warmupMic()
+      if (w !== 'ok') {
+        throw new Error(
+          w === 'denied'
+            ? '麦克风权限被拒：请在浏览器地址栏允许本页使用麦克风后重试'
+            : w === 'no-device'
+              ? '未检测到麦克风设备：请检查系统设置'
+              : w === 'insecure'
+                ? '当前环境不支持麦克风（需 HTTPS）'
+                : '麦克风不可用，请检查后重试'
+        )
+      }
     }
     const ws = new WebSpeechRecognizer(lang)
     const timer = window.setTimeout(() => ws.stop(), 10000)
@@ -776,7 +790,13 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
             </span>
           </div>
           <div className="form-row">
-            <span className="form-preview">测试/使用前会先请求麦克风权限（请点「允许」）；若提示不可用：预览框架可能限制了麦克风，请用「新标签页打开」应用后测试</span>
+            <span className="form-preview">
+              测试/首次使用会请求麦克风权限（请点「允许」）；引擎不可用会自动回退服务端识别；可用
+              <a href="/ws-test.html" target="_blank" rel="noopener" style={{ color: 'inherit', textDecoration: 'underline' }}>
+                纯引擎自测页
+              </a>
+              单独验证浏览器语音引擎
+            </span>
           </div>
           <div className="form-row">
             <button

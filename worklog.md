@@ -1140,3 +1140,60 @@ Stage Summary:
   提示延长至 6 秒
 - 修改文件：src/cove/utils/asr.ts、src/cove/pages/Chat.tsx、
   src/cove/pages/VoiceApiPage.tsx
+
+---
+Task ID: 27
+Agent: Z.ai Code (main)
+Task: 回应「多浏览器 no-speech/audio-unavailable，问题 100% 在代码」——
+采纳用户建议三项改进 + 新增纯引擎对照自测页
+
+Work Log:
+- 用户断言多浏览器（Edge/Chrome）都报 no-speech 或 audio-unavailable、
+  在线麦克风测试工具正常 → 认为代码有根本问题；给出五点分析
+  （MediaRecorder 抢占/输入输出设备不一致/Edge 语言包/事件时序/重建实例）
+- 逐条核对代码：①MediaRecorder 与 SpeechRecognition 从不并发（热身
+  立即释放+250ms，双引擎互斥运行）但「热身开-关麦克风→引擎启动」的
+  设备交接窗口在 Windows/蓝牙设备上确有风险→采纳；②③环境因素；
+  ④⑤已实现（每实例全新创建、点击时才创建）
+- 检查 sw.js：network-first + skipWaiting，在线时不读缓存——排除
+  旧代码缓存干扰；提示用户确认部署版本（a8e4af8 或更新）
+- src/cove/utils/asr.ts：
+  · 新增 micPermissionState()：navigator.permissions.query 查询权限
+    （不弹窗、不占设备）
+  · WebSpeechRecognizer 补全 onstart/onaudiostart/onsoundstart/
+    onspeechstart 事件挂载 + console.debug('[WebSpeech #N]', …)
+    诊断日志（含每轮耗时/引擎是否启动/音频流是否建立/已识别字数）
+- src/cove/pages/Chat.tsx：权限策略升级——granted → 完全跳过热身
+  直接启动引擎（gUM 零调用，彻底消除设备交接窗口）；prompt/unknown
+  → 热身触发弹窗；denied → 直接提示不做无谓尝试
+- src/cove/pages/VoiceApiPage.tsx：runWebSttTest 同样权限状态感知；
+  提示行新增「纯引擎自测页」链接（/ws-test.html，新标签页打开）
+- 新增 public/ws-test.html：纯 Web Speech API 对照自测页——零
+  getUserMedia、零 MediaRecorder、零应用代码；continuous=true、
+  每次点击全新实例、no-speech 自动换新实例续听（最多 3 次）、30s
+  自动停止；全事件日志（含时间戳）；结论判定：not-allowed→权限、
+  network→网络不通、秒级空结束且无 onstart→引擎无法启动（服务
+  不可达典型）、启动+音频但无语音→输入设备问题、识别到文本→正常；
+  iframe 内打开有横幅引导新标签页
+- 修复自测页两处 bug：重启未把新实例赋回 rec（防串扰守卫误杀重启
+  链）、30s 自动停止会继续重启（finish 幂等化 + abort 释放）
+- agent-browser 验证：
+  · 自测页真实引擎 not-allowed → 正确「权限被拒」结论 ✓
+  · mock 死引擎 → 3 次重启后「❌ 引擎无法启动（秒级静默结束）」✓
+  · mock 正常引擎 → 「✅ 引擎正常：能识别语音」+ 文本显示 ✓
+  · Chat granted → permQ=1、gUM=0、引擎直接启动、聆听正常 ✓
+  · 控制台 [WebSpeech] 诊断日志输出完整 ✓
+  · 设置页链接渲染 ✓（target=_blank）
+- lint 0 error；dev.log 全 200
+
+Stage Summary:
+- 采纳用户三点：跳过不必要的热身（granted 时 gUM 零调用）、补全
+  事件诊断日志、确认「每次新实例」已实现
+- 关键澄清：在线麦克风测试工具测的是 getUserMedia 链路（=应用的
+  服务端引擎，用户环境可用）；SpeechRecognition 是浏览器内置语音
+  服务链路（Chrome/Edge 需连 Google 服务，大陆网络常不通）——
+  多浏览器同挂恰是服务不可达特征而非代码 bug
+- 新增 /ws-test.html 纯引擎对照页供用户一锤定音；若该页同样失败
+  →环境问题实锤；若该页正常→再查应用
+- 修改文件：src/cove/utils/asr.ts、src/cove/pages/Chat.tsx、
+  src/cove/pages/VoiceApiPage.tsx、public/ws-test.html（新增）

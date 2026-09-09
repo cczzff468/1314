@@ -40,6 +40,11 @@ interface SRInstance {
   onresult: ((e: SpeechRecognitionEvent) => void) | null
   onerror: ((e: SpeechRecognitionErrorEvent) => void) | null
   onend: (() => void) | null
+  /* Chromium 扩展事件：启动/音频流建立（仅诊断用，可选） */
+  onstart?: (() => void) | null
+  onaudiostart?: (() => void) | null
+  onsoundstart?: (() => void) | null
+  onspeechstart?: (() => void) | null
   start(): void
   stop(): void
   abort(): void
@@ -103,9 +108,28 @@ export function isEngineDeadCode(code: string): boolean {
   )
 }
 
+/* 麦克风权限状态查询（不弹窗、不占设备）：
+   'granted' 已授予 / 'prompt' 待询问 / 'denied' 已拒绝 /
+   'unknown' 浏览器不支持查询（Firefox 对 microphone 名称会抛错） */
+export async function micPermissionState(): Promise<
+  'granted' | 'prompt' | 'denied' | 'unknown'
+> {
+  if (typeof navigator === 'undefined' || !navigator.permissions?.query) return 'unknown'
+  try {
+    const st = await navigator.permissions.query({ name: 'microphone' as PermissionName })
+    if (st.state === 'granted' || st.state === 'denied' || st.state === 'prompt') return st.state
+    return 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
 /* 麦克风权限热身：先显式 getUserMedia 触发浏览器权限弹窗并确认设备可用，
    成功后立即释放全部音轨（避免与 SpeechRecognition 抢占麦克风——
    Android 上同时占用会导致引擎拿不到音频流直接报错）。
+   注意：权限已授予（micPermissionState==='granted'）时应跳过本热身，
+   避免开-关麦克风与识别引擎的设备交接窗口（Windows/蓝牙设备上可能
+   引擎拿到尚未完全释放的设备）。
    返回：'ok' | 'denied'（权限被拒）| 'no-device'（无麦克风）|
    'insecure'（非安全上下文，如 http://）| 'unknown' */
 export async function warmupMic(): Promise<
@@ -138,6 +162,9 @@ export class WebSpeechRecognizer {
   private userStopped = false
   private quickEmptyEnds = 0
   private restarts = 0
+  private spin = 0
+  private gotStart = false
+  private gotAudio = false
   private interimCb: ((fullText: string) => void) | null = null
   private resolveDone: ((text: string) => void) | null = null
   private rejectDone: ((err: { code: string }) => void) | null = null
@@ -174,7 +201,9 @@ export class WebSpeechRecognizer {
   }
 
   /** 创建并启动一个全新识别实例（重启时也走这里：出错的旧实例可能已
-      不可用，必须销毁重建，不能复用） */
+      不可用，必须销毁重建，不能复用）。每个实例都挂全套事件，
+      onstart/onaudiostart 等通过 console.debug 输出诊断日志，
+      方便在浏览器控制台观察引擎真实行为 */
   private spinUp(): void {
     if (this.settled) return
     const Ctor = getSRCtor()
@@ -184,12 +213,21 @@ export class WebSpeechRecognizer {
     }
     const rec = new Ctor()
     this.rec = rec
+    this.spin++
+    this.gotStart = false
+    this.gotAudio = false
     this.lastStart = Date.now()
+    const tag = `[WebSpeech #${this.spin}]`
     rec.lang = this.lang || 'zh-CN'
     /* 关键：连续模式——说完一句、短暂停顿后不结束会话，继续听 */
     rec.continuous = true
     rec.interimResults = true
     rec.maxAlternatives = 1
+    const dbg = (msg: string) => console.debug(tag, msg)
+    if ('onstart' in rec) rec.onstart = () => { if (this.settled) return; this.gotStart = true; dbg('onstart 引擎已启动') }
+    if ('onaudiostart' in rec) rec.onaudiostart = () => { if (this.settled) return; this.gotAudio = true; dbg('onaudiostart 音频流已建立') }
+    if ('onsoundstart' in rec) rec.onsoundstart = () => { if (this.settled) return; dbg('onsoundstart 检测到声音') }
+    if ('onspeechstart' in rec) rec.onspeechstart = () => { if (this.settled) return; dbg('onspeechstart 检测到语音') }
     rec.onresult = (e) => {
       if (this.settled) return
       let interim = ''
@@ -205,14 +243,19 @@ export class WebSpeechRecognizer {
     rec.onerror = (e) => {
       if (this.settled) return
       const code = e.error || 'unknown'
+      dbg(`onerror ${code}${this.gotAudio ? '' : '（音频流尚未建立）'}`)
       /* 致命错误（network / not-allowed / audio-capture 等）记下、由随后的
          onend 结算；no-speech 与 aborted 不致命——交给 onend 重启续听
          或按用户意图结算 */
       if (code !== 'no-speech' && code !== 'aborted') this.errCode = code
     }
-    rec.onend = () => this.onRecEnd()
+    rec.onend = () => {
+      dbg(`onend（本轮 ${Date.now() - this.lastStart}ms，${this.gotStart ? '引擎已启动过' : '引擎从未启动'}，已识别 ${this.finalText.trim().length} 字）`)
+      this.onRecEnd()
+    }
     try {
       rec.start()
+      dbg('start() 已调用')
     } catch {
       this.settle('start-failed')
     }
