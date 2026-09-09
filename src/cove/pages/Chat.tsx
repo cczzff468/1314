@@ -8,7 +8,7 @@ import { collectWorldbook } from '../utils/worldbook'
 import { friendMemoryContext, maybeAutoSummarize } from '../utils/memory'
 import { fileToAvatar, fileToPhoto } from '../utils/image'
 import { formatMoney } from '../utils/qr'
-import { VoiceRecorder, WebSpeechRecognizer, sttErrorMsg } from '../utils/asr'
+import { VoiceRecorder, WebSpeechRecognizer, sttErrorMsg, warmupMic } from '../utils/asr'
 
 interface MenuPos {
   x: number
@@ -465,6 +465,7 @@ export default function Chat({
   const transBusyRef = useRef(false)
   const recRef = useRef<VoiceRecorder | null>(null)
   const wsRef = useRef<WebSpeechRecognizer | null>(null)
+  const warmRef = useRef(false)
   const msgsRef = useRef(messages)
   const hintTimer = useRef<number>(0)
 
@@ -525,7 +526,9 @@ export default function Chat({
       })
   }
 
-  /* 引擎一：浏览器 Web Speech API（实时转写），失败（network/音频不可用等）自动回退服务端识别 */
+  /* 引擎一：浏览器 Web Speech API（实时转写）。识别器内部为连续会话：
+     no-speech 超时/断句后自动换新实例续听，不会因犹豫未开口而误报；
+     失败（network/音频不可用等）自动回退服务端识别 */
   const startWebVoice = (lang: string, allowFallback: boolean) => {
     const ws = new WebSpeechRecognizer(lang)
     wsRef.current = ws
@@ -598,7 +601,10 @@ export default function Chat({
   }
 
   /* 开始语音输入：按设置选引擎——auto=优先 Web Speech API（实时转写），
-     失败自动回退服务端识别；webspeech/server=指定引擎 */
+     失败自动回退服务端识别；webspeech/server=指定引擎。
+     Web Speech 启动前先 warmupMic() 显式申请麦克风并立即释放：
+     ① 首次使用时强制弹出权限窗口（SpeechRecognition 在部分环境不弹窗
+     而是静默失败，误报「没有听到内容」）② 提前发现权限被拒/无设备 */
   const startVoice = () => {
     const voice = loadApiSetting().voice
     if (!voice.sttEnabled) {
@@ -609,10 +615,27 @@ export default function Chat({
       stopVoice()
       return
     }
-    if (recognizing) return
+    if (recognizing || warmRef.current) return
     const engine = voice.sttEngine || 'auto'
     if (engine !== 'server' && WebSpeechRecognizer.supported()) {
-      startWebVoice(voice.sttLang || 'zh-CN', engine === 'auto')
+      warmRef.current = true
+      warmupMic().then((w) => {
+        if (w !== 'ok') {
+          showHint(
+            w === 'denied'
+              ? '麦克风权限被拒：请在浏览器地址栏允许麦克风后重试'
+              : w === 'no-device'
+                ? '未检测到麦克风设备：请检查系统设置'
+                : w === 'insecure'
+                  ? '当前环境不支持麦克风（需 HTTPS）：请用新标签页打开后重试'
+                  : '麦克风不可用，请检查后重试'
+          )
+          return
+        }
+        startWebVoice(voice.sttLang || 'zh-CN', engine === 'auto')
+      }).finally(() => {
+        warmRef.current = false
+      })
     } else {
       if (engine === 'webspeech') showHint('当前浏览器不支持 Web Speech API，已改用服务端识别')
       startServerVoice()

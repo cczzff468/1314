@@ -1030,3 +1030,61 @@ Stage Summary:
   本地 HEAD（d6429f8）一致，包含全部已提交工作（至 Web Speech API
   iframe 麦克风权限修复）
 - 安全要点：推送前完成大文件与敏感信息扫描，PAT 仅一次性使用未落盘
+
+---
+Task ID: 25
+Agent: Z.ai Code (main)
+Task: 修复 Web Speech API「还没说话就提示没有听到内容」——no-speech
+自动重启续听 + 麦克风权限热身 + continuous 连续模式
+
+Work Log:
+- 用户反馈：部署后点麦克风，还没开口就弹「没有听到内容，请靠近
+  麦克风再试」；并给出排查方向（no-speech 超时机制 / 麦克风被占 /
+  权限与安全上下文 / continuous=false 提前结束）
+- 根因确认（代码审查）：
+  ① WebSpeechRecognizer 设 continuous=false，且 no-speech 错误直接
+    settle 结束会话——Chrome 约 8 秒无声即抛 no-speech，用户犹豫
+    期间就被误判「没听到」；
+  ② 启动 SpeechRecognition 前未显式申请权限，部分环境不弹权限窗
+    而是静默失败；
+  ③ 旧实例出错后从未重建（规范上出错实例可能不可用）
+- src/cove/utils/asr.ts 重写 WebSpeechRecognizer：
+  · continuous=true 连续模式（断句不结束）+ interimResults=true；
+  · 「会话级」识别：单个实例因 no-speech/自然结束 → 销毁旧实例、
+    300ms 后换全新实例续听（重启预算 15 次/会话 115s 上限兜底）；
+  · onerror 分类：致命错误（network/not-allowed/audio-capture 等）
+    立即结算；no-speech/aborted 交由 onend 重启或按用户意图结算；
+  · 保留 iframe 静默失败检测：连续 3 次 1.5s 内空结束 →
+    audio-unavailable → auto 模式回退服务端识别；
+  · 新增 warmupMic()：getUserMedia 显式触发权限弹窗→确认设备→
+    立即释放音轨→等 250ms 设备释放后再启动识别（避免 Android 上
+    引擎与 MediaRecorder 抢占麦克风）；返回 denied/no-device/
+    insecure/unknown 分类
+- src/cove/pages/Chat.tsx：startVoice 在 Web Speech 路径前先
+  warmupMic()，denied/no-device/insecure/unknown 分别给精确提示
+  （不再让引擎静默失败误报）；warmRef 防抖防双击双启
+- src/cove/pages/VoiceApiPage.tsx：runWebSttTest 同样先热身（权限
+  被拒直接给对应提示，不回退）；测试聆听窗口 8s→10s；更新引擎说明
+  文案（连续聆听、会先请求权限）
+- agent-browser 端到端验证（/ 与 /?as=app、/?as=page&p=voice）：
+  · 场景A：实例1 模拟 no-speech（500ms 无声）→ 自动换实例2 续听
+    →实例2 识别出「你好世界」→ 语音条实时显示 → 会话继续 → 结算
+    后文字落入输入框；continuous 全程 true；gUM 恰好 1 次；全程
+    无「没有听到内容」误报 ✓
+  · 场景B：gUM 拒绝（NotAllowedError）→ 引擎从未启动，提示「麦克
+    风权限被拒：请在浏览器地址栏允许麦克风后重试」✓
+  · 场景C：连续秒空结束 ×3 → audio-unavailable → auto 自动回退
+    服务端识别（gUM 二次调用证实），最终明确报错而非误报 ✓
+  · 设置页：热身后识别「测试识别正常」→「测试通过（浏览器 Web
+    Speech）：测试识别正常」✓
+- lint 0 error（仅 3 条既有 warning）；dev.log 全 200；浏览器控制
+  台无错误
+
+Stage Summary:
+- 「还没说话就报没听到」三层修复：①continuous=true+no-speech 自动
+  换新实例续听（犹豫期不再误判）②启动前 warmupMic 权限热身（分类
+  精确提示）③致命错误仍自动回退服务端识别，iframe 静默失败检测保留
+- 修改文件：src/cove/utils/asr.ts、src/cove/pages/Chat.tsx、
+  src/cove/pages/VoiceApiPage.tsx
+- 用户部署环境注意项已写入设置页文案：需 HTTPS、首次使用点「允许」
+  权限弹窗

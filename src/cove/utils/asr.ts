@@ -4,7 +4,13 @@
      部分网络/预览 iframe 内不可用。
    引擎二（回退）：MediaRecorder 录音 → 解码降采样 16kHz WAV → POST /api/asr，
      由 z-ai-web-dev-sdk（服务端）识别，不依赖任何外部语音服务。
-   策略：auto 模式下先试 Web Speech，失败（network 等）自动回退服务端识别。 */
+   策略：auto 模式下先试 Web Speech，失败（network 等）自动回退服务端识别。
+   Web Speech 关键设计：
+     - continuous = true 连续模式，说完一句、短暂停顿不结束会话；
+     - 单个识别实例因 no-speech 超时（约 8 秒无声）结束后，自动销毁旧实例、
+       换全新实例继续聆听——用户开口前的犹豫不会被误报「没有听到内容」；
+     - 调用方启动引擎前先 warmupMic() 显式申请麦克风权限并释放，
+       避免 SpeechRecognition 在权限未授/设备被占时静默失败。 */
 
 /* ---- Web Speech API 最小类型声明（lib.dom 未收录，模块内声明不与全局冲突） ---- */
 interface SpeechRecognitionAlternative {
@@ -78,13 +84,42 @@ export function sttErrorMsg(code: string): string {
   }
 }
 
+/* 麦克风权限热身：先显式 getUserMedia 触发浏览器权限弹窗并确认设备可用，
+   成功后立即释放全部音轨（避免与 SpeechRecognition 抢占麦克风——
+   Android 上同时占用会导致引擎拿不到音频流直接报错）。
+   返回：'ok' | 'denied'（权限被拒）| 'no-device'（无麦克风）|
+   'insecure'（非安全上下文，如 http://）| 'unknown' */
+export async function warmupMic(): Promise<
+  'ok' | 'denied' | 'no-device' | 'insecure' | 'unknown'
+> {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+    return 'insecure'
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    stream.getTracks().forEach((t) => t.stop())
+    /* 等设备真正释放后再启动识别引擎 */
+    await new Promise((r) => setTimeout(r, 250))
+    return 'ok'
+  } catch (e) {
+    const name = String((e as Error)?.name || '')
+    if (/NotAllowed|Permission|Security/i.test(name)) return 'denied'
+    if (/NotFound|Devices/i.test(name)) return 'no-device'
+    return 'unknown'
+  }
+}
+
 export class WebSpeechRecognizer {
   private rec: SRInstance | null = null
   private finalText = ''
   private errCode: string | null = null
   private settled = false
-  private startedAt = 0
-  private earlySilentEnd = false
+  private sessionStart = 0
+  private lastStart = 0
+  private userStopped = false
+  private quickEmptyEnds = 0
+  private restarts = 0
+  private interimCb: ((fullText: string) => void) | null = null
   private resolveDone: ((text: string) => void) | null = null
   private rejectDone: ((err: { code: string }) => void) | null = null
 
@@ -96,24 +131,48 @@ export class WebSpeechRecognizer {
     private lang: string,
   ) {}
 
-  /** 开始识别。Promise 在识别结束（说完自动停 / stop() / abort()）后 resolve
-      全部定稿文本；出错 reject { code }（code 见 SttErrorCode，可用 sttErrorMsg 转提示）。
+  /** 开始一次「会话级」识别。Promise 在会话结束（用户 stop()/abort()、
+      致命错误、会话时长上限）后 resolve 全部定稿文本；出错 reject { code }
+      （code 见 SttErrorCode，可用 sttErrorMsg 转提示）。
+      会话内部：单个识别实例因 no-speech 超时或自然断句结束后，会销毁旧
+      实例、换一个全新实例继续聆听，不会因「还没开口就超时」而提前结束。
       onInterim 回调实时返回「已定稿 + 中间结果」文本，用于 UI 实时转写展示。 */
   start(onInterim?: (fullText: string) => void): Promise<string> {
-    const Ctor = getSRCtor()
-    if (!Ctor) return Promise.reject({ code: 'unsupported' })
-    const rec = new Ctor()
-    this.rec = rec
+    if (!getSRCtor()) return Promise.reject({ code: 'unsupported' })
+    this.interimCb = onInterim ?? null
     this.finalText = ''
     this.errCode = null
     this.settled = false
-    this.earlySilentEnd = false
-    this.startedAt = Date.now()
+    this.userStopped = false
+    this.quickEmptyEnds = 0
+    this.restarts = 0
+    this.sessionStart = Date.now()
+    return new Promise<string>((resolve, reject) => {
+      this.resolveDone = resolve
+      this.rejectDone = reject
+      this.spinUp()
+    })
+  }
+
+  /** 创建并启动一个全新识别实例（重启时也走这里：出错的旧实例可能已
+      不可用，必须销毁重建，不能复用） */
+  private spinUp(): void {
+    if (this.settled) return
+    const Ctor = getSRCtor()
+    if (!Ctor) {
+      this.settle('unsupported')
+      return
+    }
+    const rec = new Ctor()
+    this.rec = rec
+    this.lastStart = Date.now()
     rec.lang = this.lang || 'zh-CN'
-    rec.continuous = false
+    /* 关键：连续模式——说完一句、短暂停顿后不结束会话，继续听 */
+    rec.continuous = true
     rec.interimResults = true
     rec.maxAlternatives = 1
     rec.onresult = (e) => {
+      if (this.settled) return
       let interim = ''
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i]
@@ -122,32 +181,75 @@ export class WebSpeechRecognizer {
         if (r.isFinal) this.finalText += alt.transcript
         else interim += alt.transcript
       }
-      onInterim?.((this.finalText + interim).trim())
+      this.interimCb?.((this.finalText + interim).trim())
     }
     rec.onerror = (e) => {
       if (this.settled) return
-      this.errCode = e.error || 'unknown'
-      /* 其余错误交由 onend 统一 settle（规范保证 error 后必触发 end） */
+      const code = e.error || 'unknown'
+      /* 致命错误（network / not-allowed / audio-capture 等）记下、由随后的
+         onend 结算；no-speech 与 aborted 不致命——交给 onend 重启续听
+         或按用户意图结算 */
+      if (code !== 'no-speech' && code !== 'aborted') this.errCode = code
     }
-    rec.onend = () => this.settle()
-    return new Promise<string>((resolve, reject) => {
-      this.resolveDone = resolve
-      this.rejectDone = reject
-      try {
-        rec.start()
-      } catch {
-        this.settled = true
-        reject({ code: 'start-failed' })
-        this.cleanup()
+    rec.onend = () => this.onRecEnd()
+    try {
+      rec.start()
+    } catch {
+      this.settle('start-failed')
+    }
+  }
+
+  /** 单个识别实例结束时的调度：
+     1) 致命错误 / 用户已主动停止 → 结算整个会话；
+     2) 1.5 秒内空结束且连续 3 次 → 音频流根本没建立（页面嵌在无
+        allow="microphone" 的 iframe 里 Chrome 会静默 onend），报
+        audio-unavailable，auto 模式下回退服务端识别；
+     3) 其余（no-speech 超时 / 自然断句结束）→ 换全新实例继续聆听，
+        用户开口前的犹豫期不再被误判为「没听到内容」。 */
+  private onRecEnd(): void {
+    if (this.settled) return
+    const rec = this.rec
+    if (rec) {
+      rec.onresult = null
+      rec.onerror = null
+      rec.onend = null
+    }
+    this.rec = null
+    if (this.errCode || this.userStopped) {
+      this.settle()
+      return
+    }
+    const elapsed = this.lastStart ? Date.now() - this.lastStart : Infinity
+    if (!this.finalText.trim() && elapsed < 1500) {
+      this.quickEmptyEnds++
+      if (this.quickEmptyEnds >= 3) {
+        this.settle('audio-unavailable')
+        return
       }
-    })
+    }
+    /* 重启预算 + 会话时长上限（调用方另有更短的 stop 定时器） */
+    const total = this.sessionStart ? Date.now() - this.sessionStart : 0
+    if (this.restarts < 15 && total < 115000) {
+      this.restarts++
+      window.setTimeout(() => {
+        if (!this.settled && !this.userStopped) this.spinUp()
+      }, 300)
+      return
+    }
+    this.settle()
   }
 
   /** 用户点击「停止」：以已识别文本结束（触发 start() 的 promise resolve）。
       个别环境（如 headless）stop 后不触发 onend，3 秒后强制结算作兜底 */
   stop(): void {
+    this.userStopped = true
+    const rec = this.rec
+    if (!rec) {
+      this.settle()
+      return
+    }
     try {
-      this.rec?.stop()
+      rec.stop()
     } catch {
       this.settle()
       return
@@ -157,8 +259,14 @@ export class WebSpeechRecognizer {
 
   /** 放弃本次识别（同样触发 promise resolve，文本可能为空） */
   abort(): void {
+    this.userStopped = true
+    const rec = this.rec
+    if (!rec) {
+      this.settle()
+      return
+    }
     try {
-      this.rec?.abort()
+      rec.abort()
     } catch {
       this.settle()
       return
@@ -171,35 +279,23 @@ export class WebSpeechRecognizer {
     window.setTimeout(() => this.settle(), 3000)
   }
 
-  private settle(): void {
+  private settle(errCode?: string): void {
     if (this.settled) return
     this.settled = true
-    const code = this.errCode
+    const code = errCode || this.errCode
     const text = this.finalText.trim()
-    /* 立即空结束（无错误、无结果，1.5 秒内）：麦克风音频流根本没建立。
-       典型场景：页面嵌在无 allow="microphone" 的 iframe 里，Chrome 的
-       SpeechRecognition 会静默 onend —— 报 audio-unavailable 而非「没听到内容」 */
-    const duration = this.startedAt ? Date.now() - this.startedAt : Infinity
-    if (!code && !text && duration < 1500) {
-      this.earlySilentEnd = true
-    }
-    /* 先取出 resolve/reject 再清理，否则 cleanup 置空后 promise 永不结算 */
+    /* 先取出 resolve/reject 再清理，否则清理置空后 promise 永不结算 */
     const resolve = this.resolveDone
     const reject = this.rejectDone
-    this.cleanup()
-    if (this.earlySilentEnd) {
-      reject?.({ code: 'audio-unavailable' })
-    } else if (code && code !== 'aborted' && !(code === 'no-speech' && text)) {
+    this.resolveDone = null
+    this.rejectDone = null
+    this.rec = null
+    this.interimCb = null
+    if (code && code !== 'aborted') {
       reject?.({ code })
     } else {
       resolve?.(text)
     }
-  }
-
-  private cleanup(): void {
-    this.rec = null
-    this.resolveDone = null
-    this.rejectDone = null
   }
 }
 

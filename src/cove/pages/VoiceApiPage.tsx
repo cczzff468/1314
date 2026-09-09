@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavBar, Modal } from '../components/common'
 import { loadApiSetting, saveApiSetting, uid } from '../store'
 import { testTtsConnection } from '../utils/apiTest'
-import { VoiceRecorder, WebSpeechRecognizer, sttErrorMsg } from '../utils/asr'
+import { VoiceRecorder, WebSpeechRecognizer, sttErrorMsg, warmupMic } from '../utils/asr'
 import type { ApiSetting, VoiceConfig } from '../types'
 
 const PROVIDER_LIST = ['OpenAI', 'Minimax 国内版', 'Minimax 国际版', '本地免费 (Edge TTS)']
@@ -301,10 +301,24 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
     }
   }
 
-  /* 浏览器 Web Speech API 引擎测试：最多听 8 秒，说完自动结束 */
+  /* 浏览器 Web Speech API 引擎测试：先热身申请麦克风权限，再最多听 10 秒。
+     识别器内部为连续会话：no-speech 超时会自动换新实例续听，
+     点测试后犹豫几秒再开口也不会误报「没有听到内容」 */
   const runWebSttTest = async (lang: string): Promise<string> => {
+    const w = await warmupMic()
+    if (w !== 'ok') {
+      throw new Error(
+        w === 'denied'
+          ? '麦克风权限被拒：请在浏览器地址栏允许本页使用麦克风后重试'
+          : w === 'no-device'
+            ? '未检测到麦克风设备：请检查系统设置'
+            : w === 'insecure'
+              ? '当前环境不支持麦克风（需 HTTPS）'
+              : '麦克风不可用，请检查后重试'
+      )
+    }
     const ws = new WebSpeechRecognizer(lang)
-    const timer = window.setTimeout(() => ws.stop(), 8000)
+    const timer = window.setTimeout(() => ws.stop(), 10000)
     try {
       showHint('正在聆听（浏览器 Web Speech API），请说一句话…')
       return await ws.start()
@@ -741,12 +755,12 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
           <div className="form-row">
             <span className="form-preview">
               {WebSpeechRecognizer.supported()
-                ? '本浏览器支持 Web Speech API：自动模式优先实时转写，失败自动回退服务端识别'
+                ? '本浏览器支持 Web Speech API：自动模式优先实时转写，失败自动回退服务端识别；连续聆听模式，没说话会一直等你开口，不会几秒就报「没听到」'
                 : '本浏览器不支持 Web Speech API：将使用服务端识别（录音后识别）'}
             </span>
           </div>
           <div className="form-row">
-            <span className="form-preview">若提示麦克风不可用：预览框架可能限制了麦克风，请用「新标签页打开」应用后测试</span>
+            <span className="form-preview">测试/使用前会先请求麦克风权限（请点「允许」）；若提示不可用：预览框架可能限制了麦克风，请用「新标签页打开」应用后测试</span>
           </div>
           <div className="form-row">
             <button
