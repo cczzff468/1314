@@ -44,6 +44,8 @@ export interface BankCard {
   id: string
   bankName: string
   cardTail: string
+  /** 完整卡号（数字串，旧数据可能缺失，展示时回退尾号） */
+  cardNo?: string
   holder: string
   phone: string
   cardType: string
@@ -54,6 +56,8 @@ export interface BankCard {
 export interface WalletState {
   balance: number
   changeFund: number
+  /** 零钱通是否已开通（未开通时进入零钱通显示开通界面） */
+  fundOpened?: boolean
   fundYield: number
   lastYieldDate: string
   relativeCards: RelativeCard[]

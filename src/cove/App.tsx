@@ -64,7 +64,7 @@ type View =
   | { name: 'stickers' }
   | { name: 'location'; friendId: string }
   | { name: 'wallet' }
-  | { name: 'walletChange' }
+  | { name: 'walletChange'; mode?: '充值' | '提现' }
   | { name: 'walletFund' }
   | { name: 'payCode' }
   | { name: 'receiveCode' }
@@ -525,9 +525,9 @@ function AppView() {
     return null
   }
 
-  const openWalletPage = (page: 'change' | 'fund' | 'paycode' | 'receivecode' | 'scan' | 'bills' | 'redpacket' | 'redpacketRecords' | 'transfer' | 'relatives' | 'bankcards') => {
+  const openWalletPage = (page: 'change' | 'fund' | 'paycode' | 'receivecode' | 'scan' | 'bills' | 'redpacket' | 'redpacketRecords' | 'transfer' | 'relatives' | 'bankcards', mode?: '充值' | '提现') => {
     const next: Record<string, View> = {
-      change: { name: 'walletChange' },
+      change: { name: 'walletChange', mode },
       fund: { name: 'walletFund' },
       paycode: { name: 'payCode' },
       receivecode: { name: 'receiveCode' },
@@ -587,6 +587,7 @@ function AppView() {
   } else if (view.name === 'walletChange') {
     content = (
       <Change
+        initialMode={view.mode}
         onBack={() => setView({ name: 'wallet' })}
         onOpenFund={() => setView({ name: 'walletFund' })}
         onOpenBills={() => setView({ name: 'bills', filter: 'change' })}

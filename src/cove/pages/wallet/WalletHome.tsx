@@ -10,7 +10,7 @@ export default function WalletHome({
   onOpenPassword,
 }: {
   onBack: () => void
-  onOpen: (page: 'change' | 'fund' | 'paycode' | 'receivecode' | 'scan' | 'bills' | 'redpacket' | 'redpacketRecords' | 'transfer' | 'relatives' | 'bankcards') => void
+  onOpen: (page: 'change' | 'fund' | 'paycode' | 'receivecode' | 'scan' | 'bills' | 'redpacket' | 'redpacketRecords' | 'transfer' | 'relatives' | 'bankcards', mode?: '充值' | '提现') => void
   onOpenPassword: () => void
 }) {
   const [tick, setTick] = useState(0)
@@ -23,65 +23,66 @@ export default function WalletHome({
     return loadWallet()
   })()
 
+  /* 线条样式图标：透明底 + 细描边 + currentColor 描边线条（黑白灰） */
+  const line = (children: JSX.Element) => <span className="wi-line-icon">{children}</span>
+
   const services: { key: 'change' | 'fund' | 'redpacket' | 'redpacketRecords' | 'transfer' | 'relatives' | 'bankcards' | 'bills'; name: string; desc: string; icon: JSX.Element }[] = [
     {
       key: 'change',
       name: '零钱',
       desc: formatMoney(w.balance),
-      icon: (
-        <span className="wi-icon" style={{ background: 'linear-gradient(135deg,#ffd53d,#ffb800)' }}>
-          ¥
-        </span>
+      icon: line(
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="8.6" />
+          <path d="M12 6.4v11.2M12 6.4 8.2 10.6M12 6.4l3.8 4.2M8.4 13.4h7.2M8.4 16.6h7.2" />
+        </svg>
       ),
     },
     {
       key: 'fund',
       name: '零钱通',
       desc: formatMoney(w.changeFund),
-      icon: (
-        <span className="wi-icon" style={{ background: 'linear-gradient(135deg,#ffc93d,#ff9d00)' }}>
-          ◆
-        </span>
+      icon: line(
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 4.2 19.8 12 12 19.8 4.2 12z" />
+          <path d="M12 8.6 15.4 12 12 15.4 8.6 12z" />
+        </svg>
       ),
     },
     {
       key: 'relatives',
       name: '亲属卡',
       desc: '亲情消费我买单',
-      icon: (
-        <span className="wi-icon" style={{ background: 'linear-gradient(135deg,#4cd97b,#07c160)' }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <rect x="3.5" y="7" width="17" height="11" rx="2" stroke="#fff" strokeWidth="1.7" />
-            <path d="M3.5 11h17" stroke="#fff" strokeWidth="1.7" />
-          </svg>
-        </span>
+      icon: line(
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3.5" y="6.5" width="17" height="12" rx="2.2" />
+          <path d="M3.5 10.5h17" />
+          <path d="M12 13.2s-2.1-1.3-2.1-2.6c0-.7.5-1.2 1.1-1.2.5 0 .8.3 1 .6.2-.3.5-.6 1-.6.6 0 1.1.5 1.1 1.2 0 1.3-2.1 2.6-2.1 2.6z" />
+        </svg>
       ),
     },
     {
       key: 'bankcards',
       name: '银行卡',
       desc: '添加银行卡，充值提现更方便',
-      icon: (
-        <span className="wi-icon" style={{ background: 'linear-gradient(135deg,#6ba8ff,#1a7dff)' }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <rect x="3" y="5.5" width="18" height="13" rx="2.2" stroke="#fff" strokeWidth="1.7" />
-            <path d="M3 10h18" stroke="#fff" strokeWidth="1.7" />
-            <path d="M6.5 14.5h4" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" />
-          </svg>
-        </span>
+      icon: line(
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="5.5" width="18" height="13" rx="2.2" />
+          <path d="M3 10h18" />
+          <path d="M6.5 14.5h4" />
+          <circle cx="16.5" cy="14.5" r="1" />
+        </svg>
       ),
     },
     {
       key: 'bills',
       name: '账单',
       desc: '收支明细',
-      icon: (
-        <span className="wi-icon" style={{ background: 'linear-gradient(135deg,#8aa2c4,#576b95)' }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <path d="M6 4.5h12v15l-3-1.8-3 1.8-3-1.8-3 1.8v-15Z" stroke="#fff" strokeWidth="1.7" strokeLinejoin="round" />
-            <path d="M9 9h6M9 12.5h6" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
-        </span>
+      icon: line(
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 4.5h12v15l-3-1.8-3 1.8-3-1.8-3 1.8v-15Z" />
+          <path d="M9 9h6M9 12.5h6" />
+        </svg>
       ),
     },
   ]
@@ -106,17 +107,19 @@ export default function WalletHome({
         }
       />
       <div className="page-body">
-        <button className="wallet-balance-card" onClick={() => onOpen('change')}>
-          <span className="wallet-balance-main">
-            <span className="wallet-balance-label">零钱</span>
-            <span className="wallet-balance-amount">¥{formatMoney(w.balance)}</span>
-          </span>
-          <span className="wallet-card-arrow">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path d="m9 5 7 7-7 7" stroke="#c7c7cc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-        </button>
+        {/* 零钱块：灰底、金额居中、下方充值/提现 */}
+        <div className="wallet-balance-block">
+          <span className="wallet-balance-label">零钱</span>
+          <span className="wallet-balance-amount">¥{formatMoney(w.balance)}</span>
+          <div className="wallet-balance-actions">
+            <button className="wallet-op-btn" onClick={() => onOpen('change', '充值')}>
+              充值
+            </button>
+            <button className="wallet-op-btn" onClick={() => onOpen('change', '提现')}>
+              提现
+            </button>
+          </div>
+        </div>
 
         <div className="wallet-pay-grid">
           <button className="wallet-pay-item" onClick={() => onOpen('paycode')}>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavBar } from '../../components/common'
+import { NavBar, Modal } from '../../components/common'
 import { BackIcon } from '../../components/icons'
 import { loadProfile, loadWallet, updateWallet, uid } from '../../store'
 import type { BankCard } from '../../types'
@@ -22,9 +22,39 @@ const detectBankIdx = (no: string) => {
   return Number(digits.slice(-1)) % BANKS.length
 }
 
+const fmtNo = (digits: string) => digits.replace(/(\d{4})(?=\d)/g, '$1 ')
+
+/* 实体卡片视觉：银行渐变底 + 行徽 + 卡号 + 持卡人 */
+function CardVisual({ card, bank, big = false, onClick }: { card: BankCard; bank: { name: string; bg: string; abbr: string }; big?: boolean; onClick?: () => void }) {
+  return (
+    <button type="button" className={`bankcard-vis${big ? ' big' : ''}`} style={{ background: `linear-gradient(120deg, ${bank.bg} 0%, ${bank.bg} 55%, rgba(255,255,255,.18) 130%)` }} onClick={onClick} aria-label={`查看${card.bankName}银行卡详情`}>
+      <span className="bankcard-vis-top">
+        <span className="bankcard-vis-bank">
+          <span className="bankcard-vis-logo">{bank.abbr}</span>
+          {card.bankName}
+        </span>
+        <span className="bankcard-vis-type">{card.cardType}</span>
+      </span>
+      <span className="bankcard-vis-chip">
+        <svg width="22" height="16" viewBox="0 0 24 17" fill="none">
+          <rect x="1" y="1" width="22" height="15" rx="2.4" stroke="rgba(255,255,255,.85)" strokeWidth="1.4" />
+          <path d="M1 6.2h6.5M9.5 1v15M16.5 1v15M9.5 8.5h7M9.5 12h7M16.5 8.5c3 0 5 1.8 6.5 2.8M16.5 12c2.6 0 4.4 1.4 5.8 2.6" stroke="rgba(255,255,255,.7)" strokeWidth="1.2" />
+        </svg>
+      </span>
+      <span className="bankcard-vis-no">{fmtNo(card.cardNo ?? '**** **** **** ' + card.cardTail)}</span>
+      <span className="bankcard-vis-bottom">
+        <span className="bankcard-vis-holder">持卡人 {card.holder || '本人'}</span>
+        {big && <span className="bankcard-vis-un">UNIONPAY 银联</span>}
+      </span>
+    </button>
+  )
+}
+
 export default function BankCards({ onBack }: { onBack: () => void }) {
   const [tick, setTick] = useState(0)
   const [adding, setAdding] = useState(false)
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [confirmDel, setConfirmDel] = useState(false)
   const [cardType, setCardType] = useState<'储蓄卡' | '信用卡'>('储蓄卡')
   const [bankIdx, setBankIdx] = useState(0)
   const [cardNo, setCardNo] = useState('')
@@ -87,6 +117,7 @@ export default function BankCards({ onBack }: { onBack: () => void }) {
       id: uid(),
       bankName: bank.name,
       cardTail: digits.slice(-4),
+      cardNo: digits,
       holder: holder.trim(),
       phone,
       cardType,
@@ -101,6 +132,75 @@ export default function BankCards({ onBack }: { onBack: () => void }) {
   const removeCard = (id: string) => {
     updateWallet((x) => ({ ...x, bankCards: x.bankCards.filter((c) => c.id !== id) }))
     setTick((t) => t + 1)
+  }
+
+  /* ---------- 银行卡详情：卡片 + 余额/卡号/持卡人/银行等信息 + 解绑 ---------- */
+  const detail = w.bankCards.find((c) => c.id === detailId) || null
+  if (detail) {
+    const bank = BANKS.find((b) => b.name === detail.bankName) ?? BANKS[0]
+    return (
+      <div className="page bank-page">
+        <NavBar
+          title="银行卡详情"
+          left={
+            <button className="nav-btn" onClick={() => setDetailId(null)} aria-label="返回">
+              <BackIcon />
+            </button>
+          }
+        />
+        <div className="page-body bank-detail-body">
+          <CardVisual card={detail} bank={bank} big />
+          <div className="list-group bank-detail-group">
+            <div className="row row-static">
+              <div className="row-main"><span className="row-title">所属银行</span></div>
+              <span className="row-value">{detail.bankName}</span>
+            </div>
+            <div className="row row-static">
+              <div className="row-main"><span className="row-title">卡类型</span></div>
+              <span className="row-value">{detail.cardType}</span>
+            </div>
+            <div className="row row-static">
+              <div className="row-main"><span className="row-title">卡号</span></div>
+              <span className="row-value bank-detail-no">{fmtNo(detail.cardNo ?? '***************' + detail.cardTail)}</span>
+            </div>
+            <div className="row row-static">
+              <div className="row-main"><span className="row-title">持卡人</span></div>
+              <span className="row-value">{detail.holder || '本人'}</span>
+            </div>
+            <div className="row row-static">
+              <div className="row-main"><span className="row-title">预留手机号</span></div>
+              <span className="row-value">{detail.phone}</span>
+            </div>
+            <div className="row row-static">
+              <div className="row-main"><span className="row-title">可用余额</span></div>
+              <span className="row-value bank-detail-bal">¥{formatMoney(detail.available)}</span>
+            </div>
+            <div className="row row-static">
+              <div className="row-main"><span className="row-title">绑定时间</span></div>
+              <span className="row-value">{new Date(detail.createdAt).toLocaleDateString('zh-CN')}</span>
+            </div>
+          </div>
+          <button className="bank-detail-del" onClick={() => setConfirmDel(true)}>
+            解绑银行卡
+          </button>
+          <div className="bank-tip">解绑后该卡不能再用于充值、提现</div>
+        </div>
+        <Modal
+          open={confirmDel}
+          title="解绑银行卡"
+          buttons={[
+            { label: '解绑', primary: true, onClick: () => {
+              removeCard(detail.id)
+              setConfirmDel(false)
+              setDetailId(null)
+            } },
+            { label: '取消', onClick: () => setConfirmDel(false) },
+          ]}
+        >
+          <div className="change-mode-desc">解绑「{detail.bankName}（{detail.cardType} · 尾号 {detail.cardTail}）」？解绑后可重新添加。</div>
+        </Modal>
+      </div>
+    )
   }
 
   if (adding) {
@@ -202,22 +302,9 @@ export default function BankCards({ onBack }: { onBack: () => void }) {
         {w.bankCards.map((c) => {
           const bank = BANKS.find((b) => b.name === c.bankName) ?? BANKS[0]
           return (
-            <div key={c.id} className="bank-card">
-              <span className="bank-card-logo" style={{ background: bank.bg }}>
-                {bank.abbr}
-              </span>
-              <span className="bank-card-main">
-                <span className="bank-card-name">
-                  {c.bankName} {c.cardType}
-                </span>
-                <span className="bank-card-no">
-                  {c.holder || '本人'} · **** **** **** {c.cardTail}
-                </span>
-                <span className="bank-card-bal">可用 ¥{formatMoney(c.available)}</span>
-              </span>
-              <button className="bank-card-del" onClick={() => removeCard(c.id)}>
-                解绑
-              </button>
+            <div key={c.id} className="bankcard-wrap">
+              <CardVisual card={c} bank={bank} onClick={() => setDetailId(c.id)} />
+              <span className="bankcard-wrap-bal">可用 ¥{formatMoney(c.available)}</span>
             </div>
           )
         })}

@@ -380,7 +380,9 @@ const DEFAULT_WALLET: WalletState = {
 export function loadWallet(): WalletState {
   const raw = read<Partial<WalletState>>(WALLET_KEY, {})
   const bankCards = (Array.isArray(raw.bankCards) ? raw.bankCards : []).map((c) => ({ ...c, available: typeof c.available === 'number' ? c.available : 0 }))
-  return { ...DEFAULT_WALLET, ...raw, bankCards }
+  /* 零钱通开通状态：仅认显式标记（开通页点击「开通零钱通」写入），未开通时进入零钱通先展示开通界面 */
+  const fundOpened = raw.fundOpened ?? false
+  return { ...DEFAULT_WALLET, ...raw, bankCards, fundOpened }
 }
 
 export function saveWallet(w: WalletState) {

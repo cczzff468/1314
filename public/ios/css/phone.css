@@ -100,8 +100,7 @@ html[data-theme="dark"] #statusbar{ color:#fff; }
   transition:width .5s ease, background-color .3s ease;
 }
 .sb-batt.low .sb-batt-fill{ background:var(--danger); }
-.sb-batt.low{ border-color:color-mix(in srgb, var(--danger) 55%, transparent); }
-.sb-batt.low::after{ background:color-mix(in srgb, var(--danger) 55%, transparent); }
+/* 低电量仅电量条变红，外框/正极凸点保持常规 40% currentColor，不变红 */
 .sb-batt-bolt{
   position:absolute; left:50%; top:50%;
   width:8.5px; height:10.5px;

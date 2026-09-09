@@ -441,3 +441,55 @@ Stage Summary:
   经 fetch 探针（线上格式）与真实模型（行为自然融入设定）双重验证
 - 修改文件：public/ios/js/modules/worldbook.js、public/ios/css/modules/worldbook.css、
   src/cove/utils/worldbook.ts
+
+---
+Task ID: 11
+Agent: Z.ai Code (主控)
+Task: 电量低电量外框不变红 + 钱包页零钱区改灰底居中带充值提现 + 服务图标线条化 + 银行卡实体卡片与详情页 + 零钱通开通界面
+
+Work Log:
+- phone.css：删除 .sb-batt.low 的 border-color 与 ::after（正极凸点）红色覆写，
+  低电量仅 .sb-batt-fill 电量条变红，外框/凸点保持 40% currentColor
+- WalletHome.tsx：零钱区重构 —— 新 .wallet-balance-block（灰底 #e3e3e6、金额居中、
+  下方「充值/提现」白底按钮），替换原白底左对齐+箭头卡片；服务列表（零钱/零钱通/
+  亲属卡/银行卡/账单）图标全部改线条样式（.wi-line-icon：透明底+1.4px 内描边+
+  currentColor 描边 SVG，¥币/菱形/卡+心/卡+芯片/票据）
+- App.tsx：openWalletPage 增加 mode 参数、View 增加 walletChange.mode；
+  WalletHome 充值/提现按钮直达零钱页并预开对应弹窗（Change 接 initialMode prop）
+- types.ts/store.ts：BankCard 增 cardNo（完整卡号）；WalletState 增 fundOpened
+  （loadWallet 显式读取，未开通=先展示开通界面）
+- BankCards.tsx：银行卡改实体卡片视觉（.bankcard-vis：银行色渐变卡面+圆形行徽+
+  卡类型 chip+芯片图形+分组卡号+持卡人，1.586 宽高比+卡面高光+按压缩放），
+  列表项点击进入「银行卡详情」页（大卡+所属银行/卡类型/卡号/持卡人/预留手机号/
+  可用余额/绑定时间 7 行 + 解绑银行卡按钮 + Modal 确认）；保存卡时存完整卡号
+- ChangeFund.tsx：新增开通界面（fundOpened=false 时渲染）—— 零钱通品牌头 +
+  收益卡（七日年化 1.9860% 大字 + 7 根橙色收益柱状图 + 能赚又能花标语）+
+  三个卖点行（随时转出/天天有收益/消费付款，线条图标）+ 协议勾选行（圆形 checkbox，
+  未勾选开通时 toast 拦截）+ 橙色「开通零钱通」大按钮 → 点击写入 fundOpened=true
+  并进入零钱通主页；1分钱起转入说明
+- index.css：新增 .wallet-balance-block/.wallet-op-btn/.wi-line-icon、
+  .bankcard-vis 系列/.bank-detail-*、.fund-open-* 系列（含收益柱、协议勾选、
+  开通按钮）；移除废弃 .bank-card*/.bank-card-bal、.wallet-balance-card 旧样式
+- 端到端验证（agent-browser + VLM + 计算样式断言，桌面 1280x800 + 移动 390x844）：
+  - 电量：手动加 .low（去 charging）→ 边框/凸点 color(srgb 0 0 0 / 0.4)（非红）、
+    电量条 rgb(255,59,48) 红 ✓；VLM 确认「外框黑灰、仅电量条红」✓
+  - 钱包：零钱块灰底 rgb(227,227,230)+金额居中（中心偏差<2px）+充值/提现白按钮 ✓；
+    5 个服务图标透明底+内描边（无彩色渐变）✓；VLM 双确认 ✓；390 宽无溢出、
+    按钮各 159px ✓
+  - 充值按钮 → 零钱页 +「从银行卡充值」弹窗自动打开（initialMode 生效）✓
+  - 零钱通：进入（未开通）→ 开通界面（收益率/7 柱/三卖点/协议/开通按钮）✓；
+    取消勾选 → 点开通 → toast「请先阅读并同意相关协议」拦截 ✓；勾选 → 开通 →
+    toast「零钱通已开通」+ 主页余额 ¥1,288.07 ✓；VLM 确认界面结构 ✓
+  - 银行卡：添加（自动生成卡号 6225 80xx…）→ 保存 → 实体卡片（CMB 招商银行红渐变、
+    宽高比 1.59、卡号/持卡人/下方可用余额）✓ → 点卡片 → 详情页 7 行信息（所属银行/
+    卡类型/完整卡号/持卡人/手机号/可用余额/绑定时间）✓ → 解绑 → Modal 确认 →
+    卡删除回空态 ✓；VLM 确认实体卡片视觉 ✓
+  - 控制台零错误、dev.log 全 200、lint 0 error（3条既有 warning）
+
+Stage Summary:
+- 五项需求全部落地：电量低电量外框不再变红；钱包零钱区灰底居中+充值/提现直达弹窗；
+  服务图标线条化；银行卡实体卡片+详情页（余额/卡号/持卡人/银行等）；零钱通微信式
+  开通界面（协议勾选+开通按钮+收益展示）
+- 修改文件：public/ios/css/phone.css、src/cove/types.ts、src/cove/store.ts、
+  src/cove/App.tsx、src/cove/pages/wallet/WalletHome.tsx、Change.tsx、
+  BankCards.tsx、ChangeFund.tsx、src/cove/index.css

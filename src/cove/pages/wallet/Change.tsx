@@ -139,8 +139,8 @@ function MoneyModal({
   )
 }
 
-export default function Change({ onBack, onOpenFund, onOpenBills, onOpenBankCards }: { onBack: () => void; onOpenFund: () => void; onOpenBills: () => void; onOpenBankCards: () => void }) {
-  const [mode, setMode] = useState<null | '充值' | '提现'>(null)
+export default function Change({ initialMode, onBack, onOpenFund, onOpenBills, onOpenBankCards }: { initialMode?: '充值' | '提现' | null; onBack: () => void; onOpenFund: () => void; onOpenBills: () => void; onOpenBankCards: () => void }) {
+  const [mode, setMode] = useState<null | '充值' | '提现'>(initialMode ?? null)
   const [hint, setHint] = useState('')
   const [tick, setTick] = useState(0)
   const wallet = (() => {
