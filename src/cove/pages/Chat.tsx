@@ -8,7 +8,7 @@ import { collectWorldbook } from '../utils/worldbook'
 import { friendMemoryContext, maybeAutoSummarize } from '../utils/memory'
 import { fileToAvatar, fileToPhoto } from '../utils/image'
 import { formatMoney } from '../utils/qr'
-import { VoiceRecorder } from '../utils/asr'
+import { VoiceRecorder, WebSpeechRecognizer, sttErrorMsg } from '../utils/asr'
 
 interface MenuPos {
   x: number
@@ -464,6 +464,7 @@ export default function Chat({
   const busyRef = useRef(false)
   const transBusyRef = useRef(false)
   const recRef = useRef<VoiceRecorder | null>(null)
+  const wsRef = useRef<WebSpeechRecognizer | null>(null)
   const msgsRef = useRef(messages)
   const hintTimer = useRef<number>(0)
 
@@ -493,12 +494,18 @@ export default function Chat({
     () => () => {
       window.clearTimeout(pressRef.current)
       recRef.current?.abort()
+      wsRef.current?.abort()
     },
     []
   )
 
-  /* 停止录音 → 后端 ASR 识别 → 文字追加到输入框 */
+  /* 停止语音：按当前引擎分发——Web Speech 停止后由 start() 的 promise 统一结算；
+     录音引擎则停止→后端识别 */
   const stopVoice = () => {
+    if (wsRef.current) {
+      wsRef.current.stop()
+      return
+    }
     const rec = recRef.current
     if (!rec) return
     setListening(false)
@@ -518,18 +525,48 @@ export default function Chat({
       })
   }
 
-  /* 开始录音：不再用浏览器 SpeechRecognition（依赖 Google 服务，国内不可达），
-     改为 MediaRecorder 录音 + 后端 /api/asr 识别，项目内直接可用 */
-  const startVoice = () => {
-    const voice = loadApiSetting().voice
-    if (!voice.sttEnabled) {
-      showHint('语音输入未开启，请在 设置-语音配置 中打开')
-      return
-    }
-    if (listening) {
-      stopVoice()
-      return
-    }
+  /* 引擎一：浏览器 Web Speech API（实时转写），network 等失败自动回退服务端识别 */
+  const startWebVoice = (lang: string, allowFallback: boolean) => {
+    const ws = new WebSpeechRecognizer(lang)
+    wsRef.current = ws
+    setListening(true)
+    setInterim('')
+    /* 60 秒上限，到时自动停止并结算 */
+    window.setTimeout(() => {
+      if (wsRef.current === ws) ws.stop()
+    }, 60000)
+    let fellBack = false
+    ws.start((text) => setInterim(text))
+      .then((text) => {
+        if (text) {
+          setDraft((p) => (p + text).slice(0, 500))
+          showHint(`已识别：${text.slice(0, 12)}${text.length > 12 ? '…' : ''}`)
+        } else {
+          showHint('没有听到内容，请靠近麦克风再试')
+        }
+      })
+      .catch((err: { code?: string }) => {
+        const code = err?.code || 'unknown'
+        if (allowFallback && (code === 'network' || code === 'start-failed' || code === 'unsupported')) {
+          fellBack = true
+          setInterim('')
+          if (wsRef.current === ws) wsRef.current = null
+          setListening(false)
+          showHint('浏览器引擎不可用，已切换服务端识别')
+          startServerVoice()
+          return
+        }
+        showHint(sttErrorMsg(code).slice(0, 36))
+      })
+      .finally(() => {
+        if (wsRef.current === ws) wsRef.current = null
+        setInterim('')
+        if (!fellBack) setListening(false)
+      })
+  }
+
+  /* 引擎二：MediaRecorder 录音 + 后端 /api/asr 识别，项目内直接可用 */
+  const startServerVoice = () => {
     if (recognizing) return
     if (!VoiceRecorder.supported()) {
       showHint('当前浏览器不支持录音，请用 Chrome 或 Edge')
@@ -554,6 +591,28 @@ export default function Chat({
             : '无法启动录音，请检查麦克风后重试'
         )
       })
+  }
+
+  /* 开始语音输入：按设置选引擎——auto=优先 Web Speech API（实时转写），
+     失败自动回退服务端识别；webspeech/server=指定引擎 */
+  const startVoice = () => {
+    const voice = loadApiSetting().voice
+    if (!voice.sttEnabled) {
+      showHint('语音输入未开启，请在 设置-语音配置 中打开')
+      return
+    }
+    if (listening) {
+      stopVoice()
+      return
+    }
+    if (recognizing) return
+    const engine = voice.sttEngine || 'auto'
+    if (engine !== 'server' && WebSpeechRecognizer.supported()) {
+      startWebVoice(voice.sttLang || 'zh-CN', engine === 'auto')
+    } else {
+      if (engine === 'webspeech') showHint('当前浏览器不支持 Web Speech API，已改用服务端识别')
+      startServerVoice()
+    }
   }
 
   const commit = (next: Message[]) => {

@@ -209,6 +209,9 @@ export interface VisionSetting {
 export interface VoiceSetting {
   sttEnabled: boolean
   sttLang: string
+  /** 语音识别引擎：auto=优先浏览器 Web Speech API（实时转写），失败自动回退服务端识别；
+      webspeech=仅浏览器引擎；server=仅服务端识别（MediaRecorder + /api/asr） */
+  sttEngine?: 'auto' | 'webspeech' | 'server'
   configs: VoiceConfig[]
   selectedId: string
 }

@@ -272,6 +272,7 @@ export function loadApiSetting(): ApiSetting {
       /* 语音输入默认开启（仅显式关闭时才关闭），避免新用户找不到隐藏开关 */
       sttEnabled: voice.sttEnabled !== false,
       sttLang: voice.sttLang || 'zh-CN',
+      sttEngine: voice.sttEngine || 'auto',
       configs: Array.isArray(voice.configs) && voice.configs.length > 0 ? voice.configs : DEFAULT_VOICE_CONFIGS,
       selectedId: voice.selectedId || (voice as any).defaultId || 'vc-minimax',
     },

@@ -598,3 +598,312 @@
    598→  三种路径均不再重复弹开通页
    599→- 修改文件：src/cove/index.css、src/cove/pages/wallet/ChangeFund.tsx、src/cove/store.ts
    600→
+   601→---
+   602→Task ID: 14
+   603→Agent: Z.ai Code (主控)
+   604→Task: 修复两处钱包 UI 回归：①零钱通开通页底部「开通零钱通」按钮变成长方形 ②账单页筛选 chips 被挡住（横向溢出截断）
+   605→
+   606→Work Log:
+   607→- 问题①定位：`.fund-page .page-body` 全局规则（index.css ~6774）把开通页滚动容器设为
+   608→  纵向 flex；开通按钮 `btn-orange-big fund-open-btn` 自带 `flex:1`（本为 fund-actions
+   609→  横排双按钮设计），在纵向容器里 flex-basis:0% → 按钮被压缩成 362×21 扁长条（实测
+   610→  height=21px），且其余子项被默认 flex-shrink 压扁
+   611→- 问题①修复（index.css）：新增 `.fund-open-page .page-body { display: block }`（恢复
+   612→  文档流，子项不再被压扁，内容超高走滚动）+ `.fund-open-page .fund-open-btn
+   613→  { display:block; width:100%; border-radius:999px }`（全宽胶囊形仿微信；因
+   614→  .btn-orange-big 在文件后部同优先级会覆盖，用 .fund-open-page 前缀提高优先级）；
+   615→  均放在全局 flex 规则之后确保级联生效
+   616→- 问题②定位：账单页 `.bills-filter` 7 个 chips 总宽 519px > 视口 390px，
+   617→  `overflow-x:auto + nowrap` 导致「亲属卡」「充值提现」两个选项被挡在屏幕外
+   618→  （实测 right=417/505 均超出 390）
+   619→- 问题②修复（index.css）：`.bills-filter` 改 `flex-wrap: wrap`，删除
+   620→  `overflow-x:auto / white-space:nowrap` → chips 自动换行为两行（5+2）全部可见
+   621→- 端到端验证（agent-browser 390x844 + 计算样式 + VLM + 壳层冒烟）：
+   622→  - 开通按钮：362×46、radius 999px、完全可见（top788-bottom834）✓；VLM 确认
+   623→    「全宽圆角胶囊形（药丸形），符合要求，无重叠溢出」✓
+   624→  - 开通流程回归：取消勾选协议→开通→toast 拦截「请先阅读并同意相关协议」✓；
+   625→    勾选→开通→toast「零钱通已开通」+主页 ¥1,288.07 ✓；主页转出/转入按钮
+   626→    159×46 不受影响（fund-actions 横排 flex 保留）✓
+   627→  - 账单筛选：7 chips 全部可见（两行：全部/红包/转账/收付款/零钱通 + 亲属卡/
+   628→    充值提现），filter 区 108-196 ✓；VLM 确认「7 个选项均完整可见，无截断」✓
+   629→  - chip 交互：点「充值提现」→ 高亮+过滤空态 ✓；点「全部」→ 恢复 1 组 ✓
+   630→  - iOS 壳层集成（/ 根路由 → 信息 APP iframe /?as=app）：账单页在 390px 内嵌
+   631→    iframe 中 7 chips 全部可见、wrap 生效 ✓
+   632→  - 控制台零错误（仅 HMR 日志）、dev.log 全 200、lint 0 error（3条既有 warning）
+   633→
+   634→Stage Summary:
+   635→- 双 bug 根因均为 CSS 级：纵向 flex 容器 + flex:1 按钮冲突；横向溢出 + nowrap 截断
+   636→- 修复仅动 src/cove/index.css 两处（.bills-filter 换行、.fund-open-page 专属
+   637→  page-body 文档流 + 胶囊按钮），钱包其他页面（零钱/收款码/扫码 rp-sheet 按钮等
+   638→  flex:1 用法均在横排容器内）不受影响
+   639→- 修改文件：src/cove/index.css
+   640→
+   641→---
+   642→Task ID: 15
+   643→Agent: Z.ai Code (主控)
+   644→Task: 钱包页入口重排：账单移到导航右上角（文字按钮），支付密码移到页底「微信安全支付」下方
+   645→
+   646→Work Log:
+   647→- WalletHome.tsx：
+   648→  - 导航 right 由支付密码锁图标按钮改为「账单」文字按钮（wallet-bills-btn，
+   649→    onClick onOpen('bills')，aria-label=账单）
+   650→  - 服务列表删除账单行（原5行 → 4行：零钱/零钱通/亲属卡/银行卡），票据图标随之移除
+   651→  - 页脚「微信安全支付」下方新增 wallet-pwd-link 按钮（12px 锁图标 currentColor
+   652→    描边 + 「支付密码」文字，onClick onOpenPassword）
+   653→- index.css：
+   654→  - 新增 .wallet-bills-btn（覆盖 .nav-btn 36×36 圆形：width/height auto、
+   655→    radius 8px、padding 3px 6px、15px/500 字重、#576b95 蓝灰——与原锁图标同色系）
+   656→  - 新增 .wallet-pwd-link（居中小入口：12px 字号 #9aa4b2 与页脚同色、
+   657→    margin 2px auto、:active 浅灰底反馈）+ 注释
+   658→  - 删除废弃 .wallet-pwd-btn（padding:4px，已无引用）
+   659→- 端到端验证（agent-browser 390x844，iOS 壳层内嵌 iframe + /?as=app 直开双路径）：
+   660→  - 右上角「账单」：42×25、right=378 右对齐、rgb(87,107,149) ✓；
+   661→    点击 → 账单页打开（7 chips 全部可见，换行修复保持）✓
+   662→  - 服务列表：4 行、无账单行 ✓
+   663→  - 「支付密码」：位于微信安全支付正下方（footer.bottom < pwd.top）✓；
+   664→    点击 → 支付密码设置页（「开启支付密码」）✓ → 返回钱包 ✓
+   665→  - VLM 截图审查四项全部确认：右上角账单按钮位置合适无重叠、列表严格4行、
+   666→    底部支付密码入口存在、整页无重叠溢出错位
+   667→  - 控制台零错误、dev.log 全 200、lint 0 error（3条既有 warning）
+   668→
+   669→Stage Summary:
+   670→- 钱包页信息架构微调完成：账单升为导航级入口（右上角文字按钮，微信蓝灰），
+   671→  支付密码下沉为页脚附属入口（安全支付语下方，低调灰），服务列表精简为 4 行
+   672→- 修改文件：src/cove/pages/wallet/WalletHome.tsx、src/cove/index.css
+   673→
+   674→---
+   675→Task ID: 16
+   676→Agent: Z.ai Code (主控)
+   677→Task: ①删除钱包页「微信安全支付」页脚文字 ②修复矮视口下部分服务选择被裁剪看不见、页面无法滚动的问题（钱包下界面可滑动）
+   678→
+   679→Work Log:
+   680→- WalletHome.tsx：删除 .wallet-footer 块（盾图标 + 微信安全支付文字），服务列表下方
+   681→  直接接「支付密码」入口；.wallet-footer/.wallet-shield CSS 保留（PayPasswordSet 页
+   682→  仍在用），.wallet-pwd-link 上边距 2→8px 补偿页脚移除后的间距
+   683→- 裁剪根因定位（375x667 实测复现）：.wallet-page .page-body 为纵向 flex（6774 全局组
+   684→  规则），矮视口下内容超高时子项默认 flex-shrink:1 被压缩 —— .wallet-services
+   685→  clientH 180 vs scrollH 242，「银行卡」整行被 overflow:hidden 裁掉完全不可见，且
+   686→  收缩吞掉溢出（overflow=0）导致 page-body 无法滚动；与 Task 14 开通按钮属同一 bug 族
+   687→- 修复（index.css）：flex 纵向 page-body 的直接子项统一 flex-shrink:0
+   688→  （覆盖 paycode/receivecode/scan/rp/fund/wallet/change 七页）—— 子项保持自然高度，
+   689→  超高时由 page-body 的 overflow-y:auto 正常滚动；change 页 .change-bottom 的
+   690→  margin-top:auto 底部锚定不受影响
+   691→- 逐页实测（agent-browser 375x667 + 390x844 双视口 + 滚动验证 + VLM）：
+   692→  - 钱包页 375x667：列表 0 裁剪、页面可滚 62px、滚动后银行卡行/支付密码完全可见 ✓；
+   693→    390x844：无溢出无裁剪、4 行 + 支付密码全部直接可见、布局不变 ✓
+   694→  - 零钱页：充值/提现按钮可见（overflow 0 无裁剪）✓；零钱通主页：overflow 4px
+   695→    可滚动、页脚可达 ✓；付款码/收款码：无裁剪 ✓；银行卡表单页（block 布局）：
+   696→    262px 滚动正常、颜色盘/保存可达 ✓；亲属卡「选择对象」弹窗：好友列表 162px
+   697→    全可见（自带 max-height 滚动）✓
+   698→  - 交互回归：右上角账单 → 账单页 7 chips 全可见 ✓；支付密码 → 密码设置页 ✓
+   699→  - VLM 四项确认：无微信安全支付字样、账单按钮正常、4 行完整无裁剪、无重叠溢出
+   700→  - 控制台零错误、lint 0 error（3条既有 warning）、dev.log 全 200
+   701→
+   702→Stage Summary:
+   703→- 钱包页脚「微信安全支付」删除，支付密码入口上移直接跟随服务列表
+   704→- 关键修复：七类 flex 纵向 page-body 子项禁 flex-shrink —— 彻底解决矮视口下
+   705→  服务行/底部内容被裁剪且不可滚动的 bug 族（含 Task 14 同根因的泛化收尾）
+   706→- 修改文件：src/cove/pages/wallet/WalletHome.tsx、src/cove/index.css
+   707→
+   708→---
+   709→Task ID: 17
+   710→Agent: main (Z.ai Code)
+   711→Task: 转账卡片颜色对齐真实微信转账橙（用户：让转账卡片颜色跟微信转账颜色一样）
+   712→
+   713→Work Log:
+   714→- 定位现状：聊天转账卡片 .tf-card 与回执卡 .receipt-card.tf 均用 Ant Design 橙
+   715→  #fa8c16（偏深橙红），真实微信为柔和金橙
+   716→- 取证真实色值：image-search 搜真实微信截图（第1张腾讯来源为转账记录列表非目标，
+   717→  换关键词后命中荆楚网真实聊天截图，含转账1680元消息卡片）
+   718→- z-ai vision 对真实截图精确取色：主色 #F09A45、垂直微渐变顶部 #F7A85C →
+   719→  底部 #ED8E35、¥圆圈 rgba(255,255,255,.25) 白边白符、白字、圆角 8px
+   720→- 修改 src/cove/index.css 两处：
+   721→  - .tf-card：background #fa8c16 → linear-gradient(180deg,#f7a85c,#ed8e35)
+   722→  - .receipt-card.tf：同步渐变 + box-shadow 颜色改 rgba(237,142,53,.28)
+   723→  - 其余不动（.tf-claim-ok 确认收款按钮为微信绿 #07c160 本就正确）
+   724→- agent-browser 实测（390x844）：进苏晴聊天 → +面板 → 转账 88.88（备注测试转账）
+   725→  → 转账成功 → 返回聊天，.tf-card 计算样式 backgroundImage=
+   726→  linear-gradient(rgb(247,168,92),rgb(237,142,53))、radius 8px、210x80 ✓
+   727→- z-ai vision 复查截图：橙色 ≈#F09A45 柔和金橙与真实微信高度一致、文字清晰、
+   728→  与气泡布局协调 ✓
+   729→- lint 0 error（3 条既有 warning 基线不变）、dev.log 全 200 无错误
+   730→
+   731→Stage Summary:
+   732→- 转账卡片（含已收款回执卡）颜色由 Ant 橙 #fa8c16 换为真实微信转账金橙渐变
+   733→  #F7A85C→#ED8E35（主色 #F09A45），经真实截图 VLM 取色 + 双重 VLM 视觉确认
+   734→- 修改文件：src/cove/index.css（2 处）
+   735→
+   736→---
+   737→Task ID: 18
+   738→Agent: main (Z.ai Code)
+   739→Task: 转账卡片整体结构对齐真实微信（用户：让转账卡片跟微信一样）
+   740→
+   741→Work Log:
+   742→- 取证（多源交叉验证）：
+   743→  - 真实聊天截图（荆楚网，含¥1680转账）canvas 像素级测量：卡片宽 65.6% 屏宽、
+   744→    橙体 68pt + 白色底条 ~30pt、橙色实色 #FBA03E≈WeUI #FA9D3B、底条白底 #FFF +
+   745→    #B2B2B2 灰字左对齐
+   746→  - GitHub 高仿微信项目 LiangNiang/fake-world 源码：两段式结构、状态图标
+   747→    （待收款=圆环双向箭头/已收款=对勾/已退还=返回箭头，SVG 直接复刻）、
+   748→    状态色 wechatOrange-3 #FA9D3B → wechatOrange-5 #FDE1C4 褪色、
+   749→    状态文案矩阵（你发起了一笔转账/请收款/已收款/已被退还）
+   750→  - VLM 无锚定记忆 ×2 + 双方案强制二选一测试：均裁定底条为「白底灰字」
+   751→    （fake-world 源码的同色橙底条方案被否，其红包渲染色亦偏离真微信，采信度降权）
+   752→- 实现两段式卡片（src/cove/pages/Chat.tsx + index.css）：
+   753→  - .tf-card：230px、圆角 10px、overflow hidden；.tf-card-body 橙 #FA9D3B
+   754→    （图标 34px SVG + ¥金额 17px/600 + 状态行 12px）；.tf-card-strip 白底
+   755→    11px #B2B2B2「微信转账」左对齐
+   756→  - 状态驱动：待收款=箭头图标+自定义备注(无则 你发起了一笔转账/请收款)、
+   757→    已收款=对勾+「已收款」、已退还=返回箭头+「已被退还」；已处理整卡褪色
+   758→    #FDE1C4 + 文字 #C87E2F（transferNote 辅助函数 + tf-done 类）
+   759→  - .receipt-card.tf 同步为 #FA9D3B 纯色（Task 17 渐变收编为官方橙）
+   760→- 端到端实测（agent-browser 390x844）：
+   761→  - 待收款：发 ¥13.14（备注请收下）→ body #FA9D3B + 备注正常显示 ✓
+   762→  - 已退还：AI 自动退还 ¥88.88/66.60 → #FDE1C4 褪色 + 已被退还 ✓
+   763→  - 收款链路：IndexedDB 注入好友 ¥52 转账 → 点卡弹确认收款 → 确认后卡片
+   764→    褪色「已收款」+ 回执消息出现 + 跳转账详情 ✓
+   765→  - VLM 两态四项检查（两段结构/图标/颜色/无布局问题）全部通过 ✓
+   766→- 测试数据清理：删 9 条测试消息（4转账+3退还+1回执+1文本）、7 条测试账单、
+   767→  余额 718.66→666.66 恢复、苏晴会话摘要恢复（消息 22→13、账单 8→1）
+   768→- lint 0 error（3 条既有 warning）、dev.log 全 200（1 条 AI 404 为未配置
+   769→  API key 的既有行为）
+   770→
+   771→Stage Summary:
+   772→- 转账卡片完全重构为真实微信两段式：橙体（WeUI 官方橙 #FA9D3B、圆环状态图标、
+   773→  状态文案）+ 白底灰字「微信转账」条；已收款/已退还自动褪色 #FDE1C4
+   774→- 修改文件：src/cove/pages/Chat.tsx（卡片 JSX + transferNote 辅助函数）、
+   775→  src/cove/index.css（.tf-card 全家族样式重写 + .receipt-card.tf）
+   776→
+   777→---
+   778→Task ID: 19
+   779→Agent: main (Z.ai Code)
+   780→Task: 转账卡片删除白色底条改为统一颜色，「微信转账」改为「转账」
+   781→
+   782→Work Log:
+   783→- 用户需求：删除转账卡片下方白色区域、整卡统一颜色；「微信转账」文字改为「转账」
+   784→- 定位当前结构（Task 18 的两段式）：.tf-card 白底容器 + .tf-card-body 橙体
+   785→  #FA9D3B + .tf-card-strip 白底灰字(#B2B2B2)「微信转账」
+   786→- 修改 src/cove/pages/Chat.tsx（1 处）：条带文字「微信转账」→「转账」
+   787→- 修改 src/cove/index.css（3 处规则）：
+   788→  - .tf-card：background #fff → #fa9d3b（整卡统一橙）
+   789→  - .tf-card-body：删除自身 background（继承容器橙）、padding 底 16→7px
+   790→  - .tf-card-strip：padding 8px 12px 9px → 0 14px 13px、color #b2b2b2 →
+   791→    rgba(255,255,255,.85)（橙底半透明白字）
+   792→  - .tf-done 褪色态：.tf-card.tf-done { background:#fde1c4 }（整卡褪色）、
+   793→    strip 褪色色 rgba(200,126,47,.72)
+   794→- agent-browser 实测（390x844，/?as=app）：
+   795→  - 真实链路发两笔转账（¥8.88、¥66.60）均被 AI 苏晴秒退 → 意外获得两笔
+   796→    已退还褪色态样本：cardBg=rgb(253,225,196) 整卡统一、strip「转账」、无白区 ✓
+   797→  - IndexedDB(ios-im/kv) 注入好友 ¥52 待收款消息 → reload 后：
+   798→    cardBg=rgb(250,157,59)（#FA9D3B 统一橙）、230x91、strip=「转账」、
+   799→    stripColor=rgba(255,255,255,.85)、note=「请收款」✓
+   800→  - VLM 双态视觉审查：待收款「统一橙色无白色底条、布局正常」；已退还
+   801→    「统一浅橙、文字依次 ¥66.60/已被退还/转账、无布局异常」✓
+   802→- 测试数据清理：删 5 条测试消息（2 转账+2 退还回执+1 注入）、4 条测试账单，
+   803→  余额 718.66 未变（两笔均被退还自动回补）、消息 18→13、账单 5→1
+   804→- lint 0 error（3 条既有 warning 基线不变）、dev.log 全 200、页面无 console error
+   805→
+   806→Stage Summary:
+   807→- 转账卡片由「橙体+白底灰字微信转账条」两段式改为单段统一橙色 #FA9D3B
+   808→  （已收款/已退还整卡褪色 #FDE1C4），底部小字改为「转账」白字 85% 透明度
+   809→- 修改文件：src/cove/pages/Chat.tsx（1 处）、src/cove/index.css（3 处规则）
+   810→
+   811→---
+   812→Task ID: 20
+   813→Agent: main (Z.ai Code)
+   814→Task: 排查并修复「识别语音用不了」
+   815→
+   816→Work Log:
+   817→- 诊断（agent-browser 实测）：浏览器 SpeechRecognition/mediaDevices/secureContext 均可用，
+   818→  点击语音输入提示「语音输入未开启，请在 设置-语音配置 中打开」→ 根因是
+   819→  store.ts 中 sttEnabled 默认 false（sttEnabled === true），开关藏在
+   820→  设置-语音配置 二级页面，新用户难以发现
+   821→- 次因排查：预览面板为 iframe 嵌入，Chrome 语音识别在 iframe 内无法访问麦克风；
+   822→  VoiceApiPage.testStt 已有 iframe 检测但 Chat.tsx 没有
+   823→- 修复 src/cove/store.ts（1 处）：sttEnabled 默认值 true（voice.sttEnabled !== false，
+   824→  仅显式关闭时保持关闭，尊重已关闭用户的选择）
+   825→- 修复 src/cove/pages/Chat.tsx startVoice（2 处）：
+   826→  - 新增 iframe 检测：预览框架内提示「请点预览面板上方 Open in New Tab 在新标签页
+   827→    打开后使用」
+   828→  - onerror 错误分类细化：network→识别服务网络异常、audio-capture→麦克风不可用
+   829→    或被占用（原统一显示「识别出错请再试」）
+   830→- 验证（agent-browser）：
+   831→  - 顶层窗口点击语音输入：不再提示未开启，SpeechRecognition 实际启动，headless
+   832→    无麦克风正确触发「麦克风权限被拒绝」提示（错误链路正常）✓
+   833→  - 注入 iframe 模拟预览面板：点击语音输入 → 正确提示「预览框架内无法使用
+   834→    麦克风，请点 Open in New Tab…」✓
+   835→  - 页面恢复正常渲染、无 console error ✓
+   836→- lint 0 error（3 条既有 warning）、dev.log 全 200
+   837→
+   838→Stage Summary:
+   839→- 语音识别用不了的根因是开关默认关闭 + 预览面板 iframe 限制；已改默认开启并对
+   840→  iframe/网络/麦克风错误给出明确引导文案
+   841→- 修改文件：src/cove/store.ts（1 处）、src/cove/pages/Chat.tsx（2 处）
+   842→
+   843→---
+   844→Task ID: 21
+   845→Agent: main (Z.ai Code)
+   846→Task: 优化 iframe 内语音功能提示为「一键新标签页打开」（用户遇到提示：
+   847→「页面正嵌在框架里运行，请在浏览器中用新标签页直接打开本页再测试」）
+   848→
+   849→Work Log:
+   850→- 定位：该提示来自 VoiceApiPage.testStt 的 iframe 检测（设置-语音配置-测试连接）；
+   851→  用户在预览面板（iframe）内操作，麦克风权限不可用，旧提示只给文字引导，
+   852→  用户需手动找 Open in New Tab 按钮
+   853→- 优化方案：iframe 检测命中时直接 window.open(location.href, '_blank')
+   854→  自动弹新标签页（点击链路内不会被弹窗拦截；返回 null 时回退文字引导）
+   855→- 修改 src/cove/pages/VoiceApiPage.tsx testStt（1 处）：iframe 分支改为
+   856→  window.open + 「已在新标签页打开本页，请在新打开的页面里继续测试语音识别」
+   857→- 修改 src/cove/pages/Chat.tsx startVoice（1 处）：同样升级为 window.open +
+   858→  「已在新标签页打开，语音输入请在新打开的页面中使用」
+   859→- 验证（agent-browser）：
+   860→  - 语音配置页：注入嵌套 iframe → 点「测试连接」→ 真实弹出 2 个新标签页
+   861→    （tab t3/t4，URL=location.href）✓；stub window.open 同步验证：openedUrl
+   862→    正确、toast 文案「已在新标签页打开本页…」✓
+   863→  - 聊天页：iframe 内进林小夏聊天 → 点语音输入 → stub 验证 openedUrl=
+   864→    /?as=app、toast「已在新标签页打开，语音输入请在新打开的页面中使用」✓
+   865→  - 页面恢复正常、多余 tab 已清理 ✓
+   866→- lint 0 error（3 条既有 warning）、dev.log 全 200
+   867→
+   868→Stage Summary:
+   869→- 预览面板内点击语音测试/语音输入时自动在新标签页打开应用（window.open），
+   870→  配 toast 引导；被弹窗拦截时回退文字提示
+   871→- 修改文件：src/cove/pages/VoiceApiPage.tsx（1 处）、src/cove/pages/Chat.tsx（1 处）
+   872→
+   873→---
+   874→Task ID: 22
+   875→Agent: main (Z.ai Code)
+   876→Task: 语音识别改为后端 ASR（不弹新标签页、项目内直接测试、彻底修复识别不管用）
+   877→
+   878→Work Log:
+   879→- 用户需求：① 不要自动弹新标签页，在项目内测试；② 语音识别不管用
+   880→- 根因分析：浏览器原生 SpeechRecognition 依赖 Google 语音服务（国内网络不可达），
+   881→  且预览 iframe 受权限策略限制——旧方案在真实部署环境也基本不可用
+   882→- 新方案：MediaRecorder 录音 → 前端解码降采样 16kHz 单声道 WAV → POST /api/asr →
+   883→  z-ai-web-dev-sdk（服务端）audio.asr.create 识别，完全不依赖浏览器语音服务
+   884→- 新增 src/app/api/asr/route.ts：POST { audio: base64 } → { text }，
+   885→  runtime nodejs、错误处理对齐 /api/chat 风格
+   886→- 新增 src/cove/utils/asr.ts：VoiceRecorder 类（getUserMedia + MediaRecorder 录音、
+   887→  60 秒上限在 Chat 层控制）、blobToWavBase64（decodeAudioData → 线性插值降采样
+   888→  16k → 16bit PCM + 44 字节 WAV 头 → base64）、recognizeBase64（fetch /api/asr）
+   889→- 改造 src/cove/pages/Chat.tsx：recogRef→recRef(VoiceRecorder)、新增 recognizing
+   890→  状态、startVoice 改 getUserMedia+MediaRecorder（无 iframe 预检、无 window.open）、
+   891→  stopVoice 停止→后端识别→文字追加输入框、语音条 UI 支持「正在识别…」态
+   892→- 改造 src/cove/pages/VoiceApiPage.tsx：testStt 重写为录 5 秒→后端识别→
+   893→  「测试通过，识别到：XXX」；移除 iframe 检测与 window.open；错误分类新增
+   894→  NotFound（未检测到麦克风设备）；表单说明改「录音后由服务端识别…页面内直接测试」
+   895→- 端到端验证：
+   896→  - z-ai tts 生成「今天天气真不错，我们一起去公园散步吧」→ curl POST /api/asr
+   897→    → 返回 {"text":"今天天气真不错，我们一起去公园散步吧"} 100% 准确 ✓
+   898→  - agent-browser：聊天页点语音输入（headless 无麦克风）→「无法启动录音，
+   899→    请检查麦克风后重试」不弹窗 ✓；语音配置页点测试连接 →「未检测到麦克风
+   900→    设备：请插入麦克风或检查系统设置」页面内直接提示 ✓；GET /api/asr 端点 ✓
+   901→  - dev.log POST /api/asr 全 200（识别 300-560ms）、lint 0 error
+   902→- 测试产物已清理（/tmp wav 与请求 JSON）
+   903→
+   904→Stage Summary:
+   905→- 语音识别链路重构：浏览器 SpeechRecognition（Google 依赖，国内不可用）→
+   906→  MediaRecorder + 后端 z-ai ASR，项目页面内直接可用，不再弹新标签页
+   907→- 新增文件：src/app/api/asr/route.ts、src/cove/utils/asr.ts；
+   908→  修改文件：src/cove/pages/Chat.tsx、src/cove/pages/VoiceApiPage.tsx
+   909→

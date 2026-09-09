@@ -906,3 +906,53 @@ Stage Summary:
   MediaRecorder + 后端 z-ai ASR，项目页面内直接可用，不再弹新标签页
 - 新增文件：src/app/api/asr/route.ts、src/cove/utils/asr.ts；
   修改文件：src/cove/pages/Chat.tsx、src/cove/pages/VoiceApiPage.tsx
+
+---
+Task ID: 23
+Agent: main (Z.ai Code)
+Task: 添加 Web Speech API（浏览器原生语音识别，双引擎架构 + 自动回退）
+
+Work Log:
+- 用户需求：在语音识别中添加 Web Speech API
+- 架构决策：双引擎——引擎一为浏览器 Web Speech API（SpeechRecognition，
+  实时转写、免流量）；引擎二为既有服务端 ASR（MediaRecorder → /api/asr）。
+  auto 模式优先 Web Speech，network/start-failed 等失败自动回退服务端识别
+- 改造 src/cove/utils/asr.ts：
+  - 新增 Web Speech API 最小 TS 类型声明（lib.dom 未收录，模块内声明）
+  - 新增 WebSpeechRecognizer 类：start(onInterim) 返回 Promise<定稿文本>，
+    onresult 累计 final+interim、onerror 记录错误码、onend 统一 settle；
+    stop()/abort() 带 3 秒 onend 兜底（个别环境 stop 后不触发 end）
+  - 新增 sttErrorMsg：错误码→中文提示（network/not-allowed/audio-capture/no-speech）
+  - 【修复自测发现的 bug】settle() 原先先 cleanup() 置空 resolver 再调用，
+    导致 promise 永不结算（真实浏览器会卡死聆听态）——改为先取出 resolver
+- types.ts/store.ts：VoiceSetting 新增 sttEngine?: 'auto'|'webspeech'|'server'，
+  store 归一化默认 'auto'，IndexedDB 持久化
+- 改造 src/cove/pages/Chat.tsx：
+  - startVoice 按引擎分发：非 server 且浏览器支持 → startWebVoice（实时转写
+    interim 显示在语音条）；否则 startServerVoice（原 MediaRecorder 链路）
+  - startWebVoice：60s 上限；network 类失败自动回退 startServerVoice 并提示
+    「浏览器引擎不可用，已切换服务端识别」；unmount 时 abort 清理
+  - stopVoice 按 wsRef/recRef 引擎分发
+- 改造 src/cove/pages/VoiceApiPage.tsx：
+  - 新增「识别引擎」segment（自动/Web Speech/服务端）+ 浏览器支持状态说明
+  - testStt 按引擎测试：auto 先测 Web Speech（8s 上限），失败自动回退
+    服务端测试并标注实际生效引擎（「测试通过（浏览器 Web Speech）/（已回退
+    服务端识别）」）；强制 webspeech 不回退，直接给错误提示
+- 端到端验证（agent-browser + mock 注入）：
+  - 聊天页 mic 点击 → Web Speech 聆听 UI（语音条+停止按钮）✓
+  - 模拟 interim → 语音条实时显示「明天去公园」✓
+  - 停止 → 定稿「明天去公园散步吧」追加输入框、UI 复位 ✓
+  - headless 真实引擎立即失败 → 自动回退服务端 → 无麦克风 → toast
+    「麦克风权限被拒绝…」页面内提示、无弹窗 ✓
+  - 设置页引擎 segment 渲染/切换/重载持久化（服务端[ON] 保持）✓
+  - 设置页 server 引擎测试 →「未检测到麦克风设备」✓
+  - 设置页 auto+mock Web Speech 测试 →「测试通过（浏览器 Web Speech）：
+    今天天气真好啊」✓
+  - bun run lint 0 error（3 条既有 warning）、dev.log 全 200
+
+Stage Summary:
+- Web Speech API 已接入为优先语音识别引擎，实时转写 + 免流量；
+  失败自动回退既有服务端 ASR，设置页可切换引擎并持久化
+- 修改文件：src/cove/utils/asr.ts、src/cove/types.ts、src/cove/store.ts、
+  src/cove/pages/Chat.tsx、src/cove/pages/VoiceApiPage.tsx
+- 修复隐藏 bug：WebSpeechRecognizer settle 的 resolver 置空时序问题

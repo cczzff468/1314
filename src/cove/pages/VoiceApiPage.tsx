@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavBar, Modal } from '../components/common'
 import { loadApiSetting, saveApiSetting, uid } from '../store'
 import { testTtsConnection } from '../utils/apiTest'
-import { VoiceRecorder } from '../utils/asr'
+import { VoiceRecorder, WebSpeechRecognizer, sttErrorMsg } from '../utils/asr'
 import type { ApiSetting, VoiceConfig } from '../types'
 
 const PROVIDER_LIST = ['OpenAI', 'Minimax 国内版', 'Minimax 国际版', '本地免费 (Edge TTS)']
@@ -285,26 +285,68 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
 
   useEffect(() => stopAudio, [])
 
-  /* 测试语音输入：MediaRecorder 录 5 秒 → 后端 /api/asr 识别（z-ai 服务端），
-     不再用浏览器 SpeechRecognition（依赖 Google 语音服务，国内网络不可达），
-     也不弹新标签页——直接在当前页面内测试 */
-  const testStt = async () => {
-    if (sttTesting) return
-    if (!VoiceRecorder.supported()) {
-      showHint('当前浏览器不支持录音，请用 Chrome 或 Edge')
-      return
-    }
-    setSttTesting(true)
+  /* 服务端识别引擎测试：录 5 秒 → 后端 /api/asr 识别（z-ai 服务端） */
+  const runServerSttTest = async (): Promise<string> => {
+    if (!VoiceRecorder.supported()) throw new Error('当前浏览器不支持录音，请用 Chrome 或 Edge')
     const rec = new VoiceRecorder()
     try {
       await rec.start()
       showHint('正在录音，请说一句话（5 秒后自动停止并识别）…')
       await new Promise((r) => setTimeout(r, 5000))
       if (!rec.active) throw new Error('录音已中断')
-      const text = await rec.stopAndRecognize()
-      showHint(`测试通过，识别到：${text.slice(0, 24)}${text.length > 24 ? '…' : ''}`)
+      return await rec.stopAndRecognize()
     } catch (e) {
       rec.abort()
+      throw e
+    }
+  }
+
+  /* 浏览器 Web Speech API 引擎测试：最多听 8 秒，说完自动结束 */
+  const runWebSttTest = async (lang: string): Promise<string> => {
+    const ws = new WebSpeechRecognizer(lang)
+    const timer = window.setTimeout(() => ws.stop(), 8000)
+    try {
+      showHint('正在聆听（浏览器 Web Speech API），请说一句话…')
+      return await ws.start()
+    } finally {
+      window.clearTimeout(timer)
+    }
+  }
+
+  /* 测试语音输入：按所选引擎测试——auto 先测浏览器 Web Speech API，
+     失败自动回退服务端识别并标注实际生效引擎；不弹新标签页，页面内直接测试 */
+  const testStt = async () => {
+    if (sttTesting) return
+    setSttTesting(true)
+    const engine = cfg.voice.sttEngine || 'auto'
+    const wantWeb = engine !== 'server' && WebSpeechRecognizer.supported()
+    try {
+      if (wantWeb) {
+        try {
+          const text = await runWebSttTest(cfg.voice.sttLang || 'zh-CN')
+          showHint(
+            text
+              ? `测试通过（浏览器 Web Speech）：${text.slice(0, 24)}${text.length > 24 ? '…' : ''}`
+              : '没有听到内容：请靠近麦克风再说一次'
+          )
+          return
+        } catch (err) {
+          const code = (err as { code?: string })?.code || 'unknown'
+          if (engine !== 'auto' || !(code === 'network' || code === 'start-failed')) {
+            throw new Error(`浏览器引擎测试失败：${sttErrorMsg(code)}`)
+          }
+          showHint('浏览器引擎不可用，自动改用服务端识别测试…')
+        }
+      } else if (engine === 'webspeech') {
+        throw new Error('当前浏览器不支持 Web Speech API，请改用自动或服务端引擎')
+      }
+      const text = await runServerSttTest()
+      showHint(
+        wantWeb && engine === 'auto'
+          ? `测试通过（已回退服务端识别）：${text.slice(0, 20)}${text.length > 20 ? '…' : ''}`
+          : `测试通过（服务端识别）：${text.slice(0, 24)}${text.length > 24 ? '…' : ''}`
+      )
+    } catch (e) {
       const msg = String((e as Error)?.name || '') + ' ' + String((e as Error)?.message || '')
       showHint(
         /NotAllowed|Permission|denied|拒绝/i.test(msg)
@@ -673,7 +715,31 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
             </div>
           </div>
           <div className="form-row">
-            <span className="form-preview">录音后由服务端识别，无需配置外部服务，页面内直接测试</span>
+            <span className="form-label">识别引擎</span>
+            <div className="seg-group">
+              {(
+                [
+                  { key: 'auto', label: '自动' },
+                  { key: 'webspeech', label: 'Web Speech' },
+                  { key: 'server', label: '服务端' },
+                ] as const
+              ).map((it) => (
+                <button
+                  key={it.key}
+                  className={`seg-item ${(cfg.voice.sttEngine || 'auto') === it.key ? 'active' : ''}`}
+                  onClick={() => updateVoice({ sttEngine: it.key })}
+                >
+                  {it.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="form-row">
+            <span className="form-preview">
+              {WebSpeechRecognizer.supported()
+                ? '本浏览器支持 Web Speech API：自动模式优先实时转写，失败自动回退服务端识别'
+                : '本浏览器不支持 Web Speech API：将使用服务端识别（录音后识别）'}
+            </span>
           </div>
           <div className="form-row">
             <button

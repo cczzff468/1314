@@ -1,8 +1,191 @@
-/* ============ 语音录制 + 后端 ASR 识别 ============
-   背景：浏览器原生 SpeechRecognition（webkitSpeechRecognition）依赖 Google 语音服务，
-   国内网络普遍不可达，且在预览框架（iframe）内受权限策略限制，导致「识别不管用」。
-   方案：MediaRecorder 录音 → 解码降采样为 16kHz 单声道 WAV → POST /api/asr，
-   由 z-ai-web-dev-sdk（服务端）识别，不依赖任何外部语音服务。 */
+/* ============ 双引擎语音识别 ============
+   引擎一（优先）：Web Speech API（浏览器原生 SpeechRecognition）——
+     实时转写、免流量、无需服务；但依赖浏览器实现与 Google 服务，
+     部分网络/预览 iframe 内不可用。
+   引擎二（回退）：MediaRecorder 录音 → 解码降采样 16kHz WAV → POST /api/asr，
+     由 z-ai-web-dev-sdk（服务端）识别，不依赖任何外部语音服务。
+   策略：auto 模式下先试 Web Speech，失败（network 等）自动回退服务端识别。 */
+
+/* ---- Web Speech API 最小类型声明（lib.dom 未收录，模块内声明不与全局冲突） ---- */
+interface SpeechRecognitionAlternative {
+  transcript: string
+}
+interface SpeechRecognitionResult {
+  readonly length: number
+  readonly isFinal: boolean
+  [index: number]: SpeechRecognitionAlternative
+}
+interface SpeechRecognitionResultList {
+  readonly length: number
+  [index: number]: SpeechRecognitionResult
+}
+interface SpeechRecognitionEvent extends Event {
+  readonly resultIndex: number
+  readonly results: SpeechRecognitionResultList
+}
+interface SpeechRecognitionErrorEvent extends Event {
+  readonly error: string
+}
+interface SRInstance {
+  lang: string
+  continuous: boolean
+  interimResults: boolean
+  maxAlternatives: number
+  onresult: ((e: SpeechRecognitionEvent) => void) | null
+  onerror: ((e: SpeechRecognitionErrorEvent) => void) | null
+  onend: (() => void) | null
+  start(): void
+  stop(): void
+  abort(): void
+}
+type SRCtor = new () => SRInstance
+
+const getSRCtor = (): SRCtor | null => {
+  if (typeof window === 'undefined') return null
+  const w = window as unknown as { SpeechRecognition?: SRCtor; webkitSpeechRecognition?: SRCtor }
+  return w.SpeechRecognition || w.webkitSpeechRecognition || null
+}
+
+/** Web Speech API 识别错误码 */
+export type SttErrorCode =
+  | 'network'
+  | 'not-allowed'
+  | 'service-not-allowed'
+  | 'audio-capture'
+  | 'no-speech'
+  | 'aborted'
+  | 'start-failed'
+  | 'unsupported'
+  | 'unknown'
+
+/** 错误码 → 用户可读提示 */
+export function sttErrorMsg(code: string): string {
+  switch (code) {
+    case 'network':
+      return '浏览器语音服务连接失败（可能被网络屏蔽）'
+    case 'not-allowed':
+    case 'service-not-allowed':
+      return '麦克风权限被拒绝：请在浏览器地址栏允许麦克风后重试'
+    case 'audio-capture':
+      return '未检测到麦克风设备：请插入麦克风或检查系统设置'
+    case 'no-speech':
+      return '没有听到声音，请靠近麦克风再试'
+    default:
+      return '语音识别失败，请重试'
+  }
+}
+
+export class WebSpeechRecognizer {
+  private rec: SRInstance | null = null
+  private finalText = ''
+  private errCode: string | null = null
+  private settled = false
+  private resolveDone: ((text: string) => void) | null = null
+  private rejectDone: ((err: { code: string }) => void) | null = null
+
+  static supported(): boolean {
+    return !!getSRCtor()
+  }
+
+  constructor(
+    private lang: string,
+  ) {}
+
+  /** 开始识别。Promise 在识别结束（说完自动停 / stop() / abort()）后 resolve
+      全部定稿文本；出错 reject { code }（code 见 SttErrorCode，可用 sttErrorMsg 转提示）。
+      onInterim 回调实时返回「已定稿 + 中间结果」文本，用于 UI 实时转写展示。 */
+  start(onInterim?: (fullText: string) => void): Promise<string> {
+    const Ctor = getSRCtor()
+    if (!Ctor) return Promise.reject({ code: 'unsupported' })
+    const rec = new Ctor()
+    this.rec = rec
+    this.finalText = ''
+    this.errCode = null
+    this.settled = false
+    rec.lang = this.lang || 'zh-CN'
+    rec.continuous = false
+    rec.interimResults = true
+    rec.maxAlternatives = 1
+    rec.onresult = (e) => {
+      let interim = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i]
+        const alt = r[0]
+        if (!alt) continue
+        if (r.isFinal) this.finalText += alt.transcript
+        else interim += alt.transcript
+      }
+      onInterim?.((this.finalText + interim).trim())
+    }
+    rec.onerror = (e) => {
+      if (this.settled) return
+      this.errCode = e.error || 'unknown'
+      /* 其余错误交由 onend 统一 settle（规范保证 error 后必触发 end） */
+    }
+    rec.onend = () => this.settle()
+    return new Promise<string>((resolve, reject) => {
+      this.resolveDone = resolve
+      this.rejectDone = reject
+      try {
+        rec.start()
+      } catch {
+        this.settled = true
+        reject({ code: 'start-failed' })
+        this.cleanup()
+      }
+    })
+  }
+
+  /** 用户点击「停止」：以已识别文本结束（触发 start() 的 promise resolve）。
+      个别环境（如 headless）stop 后不触发 onend，3 秒后强制结算作兜底 */
+  stop(): void {
+    try {
+      this.rec?.stop()
+    } catch {
+      this.settle()
+      return
+    }
+    this.armSettleFallback()
+  }
+
+  /** 放弃本次识别（同样触发 promise resolve，文本可能为空） */
+  abort(): void {
+    try {
+      this.rec?.abort()
+    } catch {
+      this.settle()
+      return
+    }
+    this.armSettleFallback()
+  }
+
+  /** onend 兜底：3 秒内未结算则强制结束（settle 幂等，已结算则无副作用） */
+  private armSettleFallback(): void {
+    window.setTimeout(() => this.settle(), 3000)
+  }
+
+  private settle(): void {
+    if (this.settled) return
+    this.settled = true
+    const code = this.errCode
+    const text = this.finalText.trim()
+    /* 先取出 resolve/reject 再清理，否则 cleanup 置空后 promise 永不结算 */
+    const resolve = this.resolveDone
+    const reject = this.rejectDone
+    this.cleanup()
+    if (code && code !== 'aborted' && !(code === 'no-speech' && text)) {
+      reject?.({ code })
+    } else {
+      resolve?.(text)
+    }
+  }
+
+  private cleanup(): void {
+    this.rec = null
+    this.resolveDone = null
+    this.rejectDone = null
+  }
+}
 
 export class VoiceRecorder {
   private recorder: MediaRecorder | null = null
