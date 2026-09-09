@@ -956,3 +956,53 @@ Stage Summary:
 - 修改文件：src/cove/utils/asr.ts、src/cove/types.ts、src/cove/store.ts、
   src/cove/pages/Chat.tsx、src/cove/pages/VoiceApiPage.tsx
 - 修复隐藏 bug：WebSpeechRecognizer settle 的 resolver 置空时序问题
+
+---
+Task ID: 24
+Agent: main (Z.ai Code)
+Task: 修复 Web Speech API「还没录音就显示没有听到内容」（iframe 麦克风权限链）
+
+Work Log:
+- 用户反馈：点语音按钮后还没说话就立即提示「没有听到内容，请靠近麦克风再试」
+- 根因定位：项目是三层嵌套 iframe（预览面板→壳层/ios/index.html→/?as=app），
+  全链无 allow="microphone" 权限策略。Chrome SpeechRecognition 在无权限
+  iframe 中静默立即 onend（无 onerror、无结果）→ 旧代码误判为 resolve('')
+  → 显示「没有听到内容」
+- 修复一（诊断增强）src/cove/utils/asr.ts：
+  - WebSpeechRecognizer 记录 startedAt；settle 时若「无错误+无结果+时长<1.5s」
+    判定音频流未建立 → reject 新错误码 audio-unavailable（不再误报没说话）
+  - sttErrorMsg 新增 audio-unavailable 提示（指向框架限制+新标签页建议）
+- 修复二（自动回退）Chat.tsx / VoiceApiPage.tsx：
+  - audio-unavailable 加入 auto 模式回退列表（与 network/start-failed 同）：
+    先提示「麦克风音频不可用，改用录音识别重试…」再自动走服务端识别
+  - 服务端 getUserMedia 权限拒绝提示改为「麦克风权限被拒：若在预览框架内，
+    请用『新标签页打开』后重试」（不自动弹窗，仅文字引导）
+  - VoiceApiPage 增加一条 form-preview 说明（预览框架限制+新标签页建议）
+- 修复三（iframe 权限链，allow="microphone" 三层补全）：
+  - src/app/page.tsx 壳层 iframe（/ 路由 SSR 直出——注意：此前误改
+    src/cove/App.tsx 的壳层分支，实际 / 路由根本不加载 React，真正渲染
+    点在 page.tsx 服务端组件）
+  - public/ios/js/modules/info.js（/?as=app 动态创建）
+  - public/ios/js/modules/settings.js（/?as=page&p=voice 常驻池）
+  - App.tsx 保留 ref+setAttribute 兜底（React 19.2 客户端渲染会丢弃 iframe
+    allow 属性——实验证实 SSR 正常输出、客户端 JSX 不传递）
+- 验证（agent-browser + mock）：
+  - SSR HTML 输出含 allow="microphone" ✓；浏览器实测 shell/inner 两层
+    iframe getAttribute('allow') 均为 "microphone" ✓
+  - mock「立即空结束」→ audio-unavailable → 自动回退服务端 → toast 为
+    服务端路径文案（非「没有听到内容」误报）✓
+  - mock 正常识别（400ms 带文本）→ 「测试识别正常」追加输入框，短时不误判 ✓
+  - headless 真实引擎 not-allowed → 权限提示（符合设计：不回退，
+    getUserMedia 同样会被拒）
+  - lint 0 error、dev.log 全 200
+
+Stage Summary:
+- 「还没录音就提示没有听到内容」根因=iframe 无麦克风权限策略导致
+  SpeechRecognition 静默失败；已通过三层 allow 修复 + 立即空结束诊断
+  （audio-unavailable）+ 自动回退服务端识别 + 新标签页文字引导组合解决
+- 修改文件：src/app/page.tsx、src/cove/App.tsx、src/cove/utils/asr.ts、
+  src/cove/pages/Chat.tsx、src/cove/pages/VoiceApiPage.tsx、
+  public/ios/js/modules/info.js、public/ios/js/modules/settings.js
+- 重要发现：/ 路由壳层 iframe 由 page.tsx SSR 直出（非 App.tsx）；
+  React 19.2 客户端渲染丢弃 iframe allow 属性（SSR 正常），嵌套 iframe
+  需 setAttribute 兜底

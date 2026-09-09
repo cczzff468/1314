@@ -332,10 +332,14 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
           return
         } catch (err) {
           const code = (err as { code?: string })?.code || 'unknown'
-          if (engine !== 'auto' || !(code === 'network' || code === 'start-failed')) {
+          if (engine !== 'auto' || !(code === 'network' || code === 'start-failed' || code === 'audio-unavailable')) {
             throw new Error(`浏览器引擎测试失败：${sttErrorMsg(code)}`)
           }
-          showHint('浏览器引擎不可用，自动改用服务端识别测试…')
+          showHint(
+            code === 'audio-unavailable'
+              ? '麦克风音频不可用，自动改用录音识别测试…'
+              : '浏览器引擎不可用，自动改用服务端识别测试…'
+          )
         }
       } else if (engine === 'webspeech') {
         throw new Error('当前浏览器不支持 Web Speech API，请改用自动或服务端引擎')
@@ -740,6 +744,9 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
                 ? '本浏览器支持 Web Speech API：自动模式优先实时转写，失败自动回退服务端识别'
                 : '本浏览器不支持 Web Speech API：将使用服务端识别（录音后识别）'}
             </span>
+          </div>
+          <div className="form-row">
+            <span className="form-preview">若提示麦克风不可用：预览框架可能限制了麦克风，请用「新标签页打开」应用后测试</span>
           </div>
           <div className="form-row">
             <button

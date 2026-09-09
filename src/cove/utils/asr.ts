@@ -56,6 +56,7 @@ export type SttErrorCode =
   | 'aborted'
   | 'start-failed'
   | 'unsupported'
+  | 'audio-unavailable'
   | 'unknown'
 
 /** 错误码 → 用户可读提示 */
@@ -70,6 +71,8 @@ export function sttErrorMsg(code: string): string {
       return '未检测到麦克风设备：请插入麦克风或检查系统设置'
     case 'no-speech':
       return '没有听到声音，请靠近麦克风再试'
+    case 'audio-unavailable':
+      return '未捕获到麦克风声音：页面可能嵌在框架里被限制了麦克风，建议新标签页打开后重试'
     default:
       return '语音识别失败，请重试'
   }
@@ -80,6 +83,8 @@ export class WebSpeechRecognizer {
   private finalText = ''
   private errCode: string | null = null
   private settled = false
+  private startedAt = 0
+  private earlySilentEnd = false
   private resolveDone: ((text: string) => void) | null = null
   private rejectDone: ((err: { code: string }) => void) | null = null
 
@@ -102,6 +107,8 @@ export class WebSpeechRecognizer {
     this.finalText = ''
     this.errCode = null
     this.settled = false
+    this.earlySilentEnd = false
+    this.startedAt = Date.now()
     rec.lang = this.lang || 'zh-CN'
     rec.continuous = false
     rec.interimResults = true
@@ -169,11 +176,20 @@ export class WebSpeechRecognizer {
     this.settled = true
     const code = this.errCode
     const text = this.finalText.trim()
+    /* 立即空结束（无错误、无结果，1.5 秒内）：麦克风音频流根本没建立。
+       典型场景：页面嵌在无 allow="microphone" 的 iframe 里，Chrome 的
+       SpeechRecognition 会静默 onend —— 报 audio-unavailable 而非「没听到内容」 */
+    const duration = this.startedAt ? Date.now() - this.startedAt : Infinity
+    if (!code && !text && duration < 1500) {
+      this.earlySilentEnd = true
+    }
     /* 先取出 resolve/reject 再清理，否则 cleanup 置空后 promise 永不结算 */
     const resolve = this.resolveDone
     const reject = this.rejectDone
     this.cleanup()
-    if (code && code !== 'aborted' && !(code === 'no-speech' && text)) {
+    if (this.earlySilentEnd) {
+      reject?.({ code: 'audio-unavailable' })
+    } else if (code && code !== 'aborted' && !(code === 'no-speech' && text)) {
       reject?.({ code })
     } else {
       resolve?.(text)

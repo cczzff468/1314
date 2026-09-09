@@ -607,6 +607,8 @@ function ensureCovePool() {
   frame.src = '/?as=page&p=api'; // 预载任意一页即可，切页由 postMessage 驱动
   frame.title = 'API设置';
   frame.setAttribute('scrolling', 'no');
+  /* 麦克风权限策略：语音配置页测试语音输入（Web Speech / getUserMedia）需要 allow 传递 */
+  frame.setAttribute('allow', 'microphone');
   /* 首次挂载到 iframe load 完成前显示加载占位（与信息APP一致） */
   const boot = el('div', 'app-boot-mask');
   boot.innerHTML = '<div class="spinner"></div>';

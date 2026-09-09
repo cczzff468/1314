@@ -857,6 +857,12 @@ type StandalonePageId = 'api' | 'vision' | 'voice'
 export default function App() {
   const [asApp] = useState(isAsApp)
   const [page, setPage] = useState<StandalonePageId | null>(standalonePage)
+  const shellRef = useRef<HTMLIFrameElement>(null)
+  /* 壳层 iframe 补 microphone 权限策略（React 19 不渲染 iframe allow 属性，
+     用 ref + setAttribute 兼底，语音识别在嵌套场景下需要逐层 allow 传递） */
+  useEffect(() => {
+    shellRef.current?.setAttribute('allow', 'microphone')
+  }, [])
   useEffect(() => {
     if (!asApp && !page) document.title = '主屏幕'
   }, [asApp, page])
@@ -900,8 +906,10 @@ export default function App() {
   return (
     <div style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', background: '#000' }}>
       <iframe
+        ref={shellRef}
         title="主屏幕"
         src="/ios/index.html"
+        allow="microphone"
         style={{ width: '100%', height: '100%', border: 0, display: 'block' }}
       />
     </div>

@@ -31,6 +31,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
         <iframe
           title="主屏幕"
           src="/ios/index.html"
+          allow="microphone"
           style={{ width: '100%', height: '100%', border: 0, display: 'block' }}
         />
         <script dangerouslySetInnerHTML={{ __html: SW_REGISTER }} />

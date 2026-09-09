@@ -525,7 +525,7 @@ export default function Chat({
       })
   }
 
-  /* 引擎一：浏览器 Web Speech API（实时转写），network 等失败自动回退服务端识别 */
+  /* 引擎一：浏览器 Web Speech API（实时转写），失败（network/音频不可用等）自动回退服务端识别 */
   const startWebVoice = (lang: string, allowFallback: boolean) => {
     const ws = new WebSpeechRecognizer(lang)
     wsRef.current = ws
@@ -547,12 +547,16 @@ export default function Chat({
       })
       .catch((err: { code?: string }) => {
         const code = err?.code || 'unknown'
-        if (allowFallback && (code === 'network' || code === 'start-failed' || code === 'unsupported')) {
+        if (allowFallback && (code === 'network' || code === 'start-failed' || code === 'unsupported' || code === 'audio-unavailable')) {
           fellBack = true
           setInterim('')
           if (wsRef.current === ws) wsRef.current = null
           setListening(false)
-          showHint('浏览器引擎不可用，已切换服务端识别')
+          showHint(
+            code === 'audio-unavailable'
+              ? '麦克风音频不可用，改用录音识别重试…'
+              : '浏览器引擎不可用，已切换服务端识别'
+          )
           startServerVoice()
           return
         }
@@ -587,7 +591,7 @@ export default function Chat({
         const msg = String((e as Error)?.name || '') + ' ' + String((e as Error)?.message || '')
         showHint(
           /NotAllowed|Permission|denied|拒绝/i.test(msg)
-            ? '麦克风权限被拒绝：请在浏览器地址栏允许麦克风后重试'
+            ? '麦克风权限被拒：若在预览框架内，请用「新标签页打开」后重试'
             : '无法启动录音，请检查麦克风后重试'
         )
       })
