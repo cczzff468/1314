@@ -1197,3 +1197,31 @@ Stage Summary:
   →环境问题实锤；若该页正常→再查应用
 - 修改文件：src/cove/utils/asr.ts、src/cove/pages/Chat.tsx、
   src/cove/pages/VoiceApiPage.tsx、public/ws-test.html（新增）
+
+---
+Task ID: 28
+Agent: Z.ai Code (main)
+Task: 回答用户提问「录音用不用空间」——核实录音/识别链路的存储占用
+
+Work Log:
+- 逐层核对代码,确认音频全链路零落盘:
+  · Web Speech 引擎:SpeechRecognition 直传音频流给浏览器语音
+    服务,不生成任何录音文件;
+  · 服务端引擎:VoiceRecorder 录音仅存内存(Blob chunks)→
+    stopAndRecognize() 在识别前即 cleanup() 清空 stream/recorder/
+    chunks;WAV ArrayBuffer 与 base64 均为局部变量,识别完即被 GC;
+  · /api/asr 路由:无任何 fs 写盘,base64 仅在请求内存中转给
+    z-ai SDK,返回文本后丢弃;
+  · src/cove/types.ts Message 结构核对:仅 text/quote/sticker/
+    location 等小字段,无 audio 字段;localStorage/IndexedDB 只存
+    文字消息、草稿、设置;
+  · prisma schema 仅有脚手架 User/Post,聊天数据不经数据库,
+    db 文件不随录音增长。
+- 体积测算:16kHz 16bit 单声道 WAV ≈ 32KB/s,10 秒语音内存峰值
+  ~400KB(base64 后),说完即释放;磁盘/手机存储占用为 0
+- dev server 复查:全 200,无需改动代码
+
+Stage Summary:
+- 纯答疑任务,无代码变更:录音不占任何持久化空间(内存临时
+  ~32KB/秒,说完即回收);占用存储的只有聊天文字与设置(通常
+  <1MB)。音频从不保存,故也不支持回听语音
