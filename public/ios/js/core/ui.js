@@ -14,9 +14,9 @@ export function toast(msg, ms = 2200) {
 }
 
 /* ---------- 中央对话框（alert / confirm / prompt） ---------- */
-export function dialog({ title = '', message = '', input = null, inputType = 'text', placeholder = '', value = '', mono = false, buttons = [{ text: '好' }] }) {
+export function dialog({ title = '', message = '', input = null, inputType = 'text', placeholder = '', value = '', mono = false, buttons = [{ text: '好' }], cls = '' }) {
   return new Promise((resolve) => {
-    const mask = el('div', 'dialog-mask');
+    const mask = el('div', 'dialog-mask' + (cls ? ' ' + cls : ''));
     const d = el('div', 'dialog');
     d.innerHTML = `
       ${title ? `<div class="dialog-title">${escapeHtml(title)}</div>` : ''}
@@ -46,9 +46,9 @@ export function dialog({ title = '', message = '', input = null, inputType = 'te
   });
 }
 
-export function confirmDialog(title, message, { okText = '确定', cancelText = '取消', danger = false } = {}) {
+export function confirmDialog(title, message, { okText = '确定', cancelText = '取消', danger = false, cls = '' } = {}) {
   return dialog({
-    title, message,
+    title, message, cls,
     buttons: [
       { text: cancelText, value: false },
       { text: okText, value: true, bold: true, danger },
@@ -56,16 +56,16 @@ export function confirmDialog(title, message, { okText = '确定', cancelText = 
   });
 }
 
-export function promptDialog(title, message, { placeholder = '', value = '', inputType = 'text', mono = false, okText = '好' } = {}) {
+export function promptDialog(title, message, { placeholder = '', value = '', inputType = 'text', mono = false, okText = '好', cls = '' } = {}) {
   return dialog({
-    title, message, input: true, inputType, placeholder, value, mono,
+    title, message, input: true, inputType, placeholder, value, mono, cls,
     buttons: [{ text: '取消', value: null }, { text: okText, value: undefined, bold: true }],
   });
 }
 
 /* ---------- 底部 Sheet（内容自定义） ---------- */
-export function sheet({ title = '', build, onClose, full = false }) {
-  const mask = el('div', 'sheet-mask');
+export function sheet({ title = '', build, onClose, full = false, cls = '' }) {
+  const mask = el('div', 'sheet-mask' + (cls ? ' ' + cls : ''));
   const s = el('div', 'sheet');
   s.style.maxHeight = full ? '96%' : '88%';
   s.innerHTML = `
@@ -87,9 +87,9 @@ export function sheet({ title = '', build, onClose, full = false }) {
 }
 
 /* ---------- iOS 动作菜单 ActionSheet ---------- */
-export function actionSheet(actions, { cancelText = '取消', title = '' } = {}) {
+export function actionSheet(actions, { cancelText = '取消', title = '', cls = '' } = {}) {
   return new Promise((resolve) => {
-    const mask = el('div', 'dialog-mask');
+    const mask = el('div', 'dialog-mask' + (cls ? ' ' + cls : ''));
     mask.style.background = 'rgba(0,0,0,.4)';
     const wrap = el('div', '');
     wrap.style.cssText = 'position:absolute;bottom:0;left:0;right:0;padding:0 10px calc(22px + 14px);display:flex;flex-direction:column;gap:8px;animation:sheetUp .35s cubic-bezier(.32,.72,0,1) both;';

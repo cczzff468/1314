@@ -14,15 +14,17 @@ import { Apps as AppIcons } from '../core/icons.js';
 
 let root = null;
 let nav = null;
-/* 根页筛选状态：范围（all/global/local/exclusive）+ 是否仅看已启用 */
+/* 根页筛选状态：范围（all/global/local/exclusive）+ 是否仅看已启用 + 专属视角的联系人（空=全部） */
 let curScope = 'all';
 let onlyEnabled = false;
+let curContact = '';
 
 const PLUS_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 4.6v14.8M4.6 12h14.8"/></svg>';
 const MORE_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>';
 const X_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 const BOOK_SVG = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 6.2C10.5 4.9 8.7 4.3 6.9 4.3c-1.1 0-2.2.2-2.9.6v13.5c.7-.4 1.8-.6 2.9-.6 1.8 0 3.6.6 5.1 1.9 1.5-1.3 3.3-1.9 5.1-1.9 1.1 0 2.2.2 2.9.6V4.9c-.7-.4-1.8-.6-2.9-.6-1.8 0-3.6.6-5.1 1.3z"/><path d="M12 6.2V20" stroke-width="1.5"/></svg>';
 const BOOK_BIG_SVG = '<svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 6.2C10.5 4.9 8.7 4.3 6.9 4.3c-1.1 0-2.2.2-2.9.6v13.5c.7-.4 1.8-.6 2.9-.6 1.8 0 3.6.6 5.1 1.9 1.5-1.3 3.3-1.9 5.1-1.9 1.1 0 2.2.2 2.9.6V4.9c-.7-.4-1.8-.6-2.9-.6-1.8 0-3.6.6-5.1 1.3z"/><path d="M12 6.2V20" stroke-width="1.4"/></svg>';
+const CHEV_DOWN_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg>';
 const SCOPE_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.6"/><path d="M3.4 12h17.2M12 3.4c2.6 2.4 4 5.4 4 8.6s-1.4 6.2-4 8.6c-2.6-2.4-4-5.4-4-8.6s1.4-6.2 4-8.6z"/></svg>';
 const LINK_SVG = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 13.8a3.8 3.8 0 0 0 5.4 0l3.2-3.2a3.8 3.8 0 0 0-5.4-5.4l-1.4 1.4"/><path d="M13.8 10.2a3.8 3.8 0 0 0-5.4 0l-3.2 3.2a3.8 3.8 0 0 0 5.4 5.4l1.4-1.4"/></svg>';
 const DOC_SVG = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2.5H6.5A1.5 1.5 0 0 0 5 4v16a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 20V7.5z"/><path d="M14 2.5V7.5H19M8.5 12h7M8.5 15.5h4.5"/></svg>';
@@ -49,6 +51,7 @@ export default {
     root.innerHTML = '';
     curScope = 'all';
     onlyEnabled = false;
+    curContact = '';
     const overlay = el('div', '');
     overlay.style.cssText = 'position:absolute;inset:0;z-index:10;';
     root.appendChild(overlay);
@@ -65,10 +68,13 @@ export default {
 
 /* ============ 根页面：世界书管理（黑白灰 · 统计 + 筛选 + 开关列表） ============ */
 function makeRootPage() {
+  /* 专属视角：右上角联系人下拉（仅在筛选「专属」时出现） */
+  const ctBtn = navBtn(`<span class="wb-ct-name">全部角色</span>${CHEV_DOWN_SVG}`, () => pickContact(), 'pill-btn wb-ctbtn');
+  ctBtn.style.display = 'none';
   const page = nav.makePage({
     title: '世界书',
     className: 'wb-page',
-    right: [navBtn(PLUS_SVG, () => newBook(), 'pill-btn')],
+    right: [ctBtn, navBtn(PLUS_SVG, () => newBook(), 'pill-btn')],
     async build(body, pageEl) {
       body.classList.add('wb-body');
       body.innerHTML = `
@@ -109,6 +115,7 @@ function makeRootPage() {
           const k = c.dataset.st;
           if (k === 'enabled') onlyEnabled = !onlyEnabled;
           else curScope = (curScope === k) ? 'all' : k;
+          if (curScope !== 'exclusive') curContact = '';
           loadBooks(body);
         };
       });
@@ -118,6 +125,7 @@ function makeRootPage() {
           if (curScope === c.dataset.f) return;
           haptic(4);
           curScope = c.dataset.f;
+          if (curScope !== 'exclusive') curContact = '';
           loadBooks(body);
         };
       });
@@ -150,9 +158,10 @@ async function loadBooks(body) {
 
   applyStats(body, books, entries, statEl);
 
-  /* 筛选：范围 + 仅看已启用 */
+  /* 筛选：范围 + 专属视角联系人 + 仅看已启用 */
   let shown = books;
   if (curScope !== 'all') shown = shown.filter(b => b.scope === curScope);
+  if (curScope === 'exclusive' && curContact) shown = shown.filter(b => Array.isArray(b.bound) && b.bound.includes(curContact));
   if (onlyEnabled) shown = shown.filter(b => b.enabled);
 
   listEl.innerHTML = '';
@@ -166,11 +175,17 @@ async function loadBooks(body) {
     return;
   }
   if (!shown.length) {
+    const ctTitle = curScope === 'exclusive' && curContact
+      ? `「${curContact}」暂无专属世界书`
+      : (onlyEnabled && curScope === 'all' ? '没有已启用的世界书' : '该范围下暂无世界书');
+    const ctSub = curScope === 'exclusive' && curContact
+      ? '在该角色的聊天设置里，或书籍的「绑定角色」里绑定后才会出现'
+      : (onlyEnabled && curScope === 'all' ? '打开卡片上的开关后，会出现在这里' : '切换范围筛选，或点 + 新建一个');
     listEl.innerHTML = `
       <div class="empty-state">
         ${SCOPE_SVG.replace('width="15" height="15"', 'width="44" height="44"')}
-        <div class="es-title">${onlyEnabled && curScope === 'all' ? '没有已启用的世界书' : '该范围下暂无世界书'}</div>
-        <div>${onlyEnabled && curScope === 'all' ? '打开卡片上的开关后，会出现在这里' : '切换范围筛选，或点 + 新建一个'}</div>
+        <div class="es-title">${escapeHtml(ctTitle)}</div>
+        <div>${escapeHtml(ctSub)}</div>
       </div>`;
     return;
   }
@@ -199,6 +214,14 @@ function applyStats(body, books, entries, statEl) {
   const pageEl = body.closest('.nav-page') || body;
   pageEl.querySelectorAll('.wb-chip').forEach(c => c.classList.toggle('on', c.dataset.f === curScope));
 
+  /* 专属视角：右上角联系人下拉（仅专属筛选时显示；同步当前选择名） */
+  const ctBtn = pageEl.querySelector('.wb-ctbtn');
+  if (ctBtn) {
+    ctBtn.style.display = curScope === 'exclusive' ? '' : 'none';
+    const nm = ctBtn.querySelector('.wb-ct-name');
+    if (nm) nm.textContent = curContact || '全部角色';
+  }
+
   if (statEl) {
     if (books.length) {
       let last = 0;
@@ -224,15 +247,15 @@ function bookCard(book, entries, body) {
   const kwCount = entries.reduce((n, e) => n + (Array.isArray(e.keywords) ? e.keywords.length : 0), 0);
   const scope = SCOPES[book.scope] || SCOPES.global;
   const card = el('div', 'wb-card' + (book.enabled ? '' : ' off'));
-  /* 编辑与「更多」上移至头部行，与启用开关垂直对齐 */
+  /* 启用开关在前，「编辑」「更多(⋯)」在开关右侧（同一行垂直对齐） */
   card.innerHTML = `
     <div class="wb-card-head">
       <div class="wb-card-icon s-${book.scope}">${BOOK_SVG}</div>
       <div class="wb-card-name ellipsis">${escapeHtml(book.name || '未命名')}</div>
       <div class="wb-scope-chip s-${book.scope}">${scope.label}</div>
+      <div class="switch ${book.enabled ? 'on' : ''}" role="switch" aria-label="启用世界书"></div>
       <button class="wb-act-btn edit">编辑</button>
       <button class="wb-act-btn more" aria-label="更多操作">${MORE_SVG}</button>
-      <div class="switch ${book.enabled ? 'on' : ''}" role="switch" aria-label="启用世界书"></div>
     </div>
     <div class="wb-card-meta">
       <div class="ellipsis">${entries.length} 个条目 · ${kwCount} 个关键词</div>
@@ -268,7 +291,7 @@ async function bookMenu(book) {
     { text: '重命名', value: 'rename' },
     { text: '复制世界书', value: 'copy' },
     { text: '删除世界书', value: 'del', danger: true },
-  ]);
+  ], { cls: 'wb-mono' });
   if (!v) return;
   if (v === 'toggle') {
     book.enabled = !book.enabled;
@@ -277,7 +300,7 @@ async function bookMenu(book) {
     toast(book.enabled ? '已启用' : '已停用');
   }
   if (v === 'rename') {
-    const name = await promptDialog('重命名世界书', '', { value: book.name || '', okText: '好' });
+    const name = await promptDialog('重命名世界书', '', { value: book.name || '', okText: '好', cls: 'wb-mono' });
     if (name && name.trim()) {
       book.name = name.trim();
       book.updatedAt = Date.now();
@@ -294,13 +317,30 @@ async function bookMenu(book) {
     toast('已复制（默认停用）');
   }
   if (v === 'del') {
-    const ok = await confirmDialog('删除世界书', `删除「${book.name || '未命名'}」及其全部条目？`, { okText: '删除', danger: true });
+    const ok = await confirmDialog('删除世界书', `删除「${book.name || '未命名'}」及其全部条目？`, { okText: '删除', danger: true, cls: 'wb-mono' });
     if (!ok) return;
     const entries = await DB.byIndex('wbentries', 'bookId', book.id);
     for (const e of entries) await DB.del('wbentries', e.id);
     await DB.del('worldbooks', book.id);
     toast('已删除');
   }
+  const body = root && root.querySelector('.page-body');
+  if (body && body.querySelector('#wb-list')) await loadBooks(body);
+}
+
+/* 专属视角：右上角下拉选择联系人（信息APP好友），筛选该角色绑定的专属世界书 */
+async function pickContact() {
+  const friends = await loadChatFriends();
+  const opts = [{ text: '全部角色', value: '', desc: '查看所有专属世界书' }];
+  friends.forEach(f => {
+    const on = f.name === curContact;
+    opts.push({ text: (on ? '✓ ' : '') + f.name, value: f.name, desc: on ? '当前视角' : '查看绑定给 TA 的专属世界书' });
+  });
+  const v = await actionSheet(opts, { cls: 'wb-mono', title: '选择角色查看专属世界书' });
+  if (v === undefined || v === null) return;
+  if (v === curContact) return;
+  curContact = v || '';
+  haptic(4);
   const body = root && root.querySelector('.page-body');
   if (body && body.querySelector('#wb-list')) await loadBooks(body);
 }
@@ -445,7 +485,7 @@ function openBookEntries(book) {
           { text: `全局 — ${SCOPES.global.desc}`, value: 'global' },
           { text: `局部 — ${SCOPES.local.desc}`, value: 'local' },
           { text: `专属 — ${SCOPES.exclusive.desc}`, value: 'exclusive' },
-        ]);
+        ], { cls: 'wb-mono' });
         if (!v || v === book.scope) return;
         book.scope = v;
         if (v !== 'exclusive') book.bound = [];
@@ -559,7 +599,7 @@ async function entryMenu(book, entry) {
     { text: '编辑条目', value: 'edit' },
     { text: entry.enabled ? '停用条目' : '启用条目', value: 'toggle' },
     { text: '删除条目', value: 'del', danger: true },
-  ]);
+  ], { cls: 'wb-mono' });
   if (!v) return;
   if (v === 'edit') { openEntryEditor(book, entry); return; }
   if (v === 'toggle') {
@@ -571,7 +611,7 @@ async function entryMenu(book, entry) {
     toast(entry.enabled ? '条目已启用' : '条目已停用');
   }
   if (v === 'del') {
-    const ok = await confirmDialog('删除条目', `删除「${entry.name || '未命名条目'}」？`, { okText: '删除', danger: true });
+    const ok = await confirmDialog('删除条目', `删除「${entry.name || '未命名条目'}」？`, { okText: '删除', danger: true, cls: 'wb-mono' });
     if (!ok) return;
     await DB.del('wbentries', entry.id);
     book.updatedAt = Date.now();
@@ -585,6 +625,7 @@ async function entryMenu(book, entry) {
 function openBindPicker(book, pageEl) {
   sheet({
     title: '绑定角色',
+    cls: 'wb-mono',
     build(body, close) {
       body.classList.add('wb-bind-body');
       const tip = el('div', 'wb-bind-tip');
@@ -781,7 +822,7 @@ function openEntryEditor(book, entry) {
       if (!isNew) {
         body.querySelector('#wbe-del').onclick = async () => {
           haptic(4);
-          const ok = await confirmDialog('删除条目', `删除「${data.name || '未命名条目'}」？`, { okText: '删除', danger: true });
+          const ok = await confirmDialog('删除条目', `删除「${data.name || '未命名条目'}」？`, { okText: '删除', danger: true, cls: 'wb-mono' });
           if (!ok) return;
           await DB.del('wbentries', data.id);
           book.updatedAt = Date.now();

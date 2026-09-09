@@ -3650,6 +3650,21 @@ button:disabled {
   margin-bottom: 14px;
 }
 
+/* 专属世界书分组：可收缩（表头行整行点击，箭头旋转指示） */
+.lore-collapse-head .row-preview {
+  transition: none;
+}
+.lore-chev {
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin-left: 6px;
+  transition: transform 0.22s ease;
+}
+.lore-chev.open {
+  transform: rotate(90deg);
+}
+
 .remark-input {
   width: 100%;
   border: 1px solid var(--separator);

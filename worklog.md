@@ -353,3 +353,53 @@ Stage Summary:
   世界书APP绑定角色页同步可见，注入链路端到端实测命中
 - 修改文件：public/ios/js/modules/worldbook.js、public/ios/css/modules/worldbook.css、
   src/cove/utils/worldbook.ts、src/cove/pages/ChatSettings.tsx
+
+---
+Task ID: 9
+Agent: Z.ai Code (主控)
+Task: 世界书界面第二轮细化：编辑/⋯ 移到开关右侧 + 图标线条化 + 统计条缩小 + 专属筛选联系人下拉 + 弹层蓝色黑灰化 + 聊天设置专属世界书分组可收缩
+
+Work Log:
+- worldbook.js 卡片头布局：DOM 顺序改为 图标→名称→范围chip→开关→编辑→更多(⋯)（开关在前，编辑/⋯ 在开关右面）；
+  .wb-card .switch margin-left:auto 使开关+编辑+更多整组靠右
+- 前置图标全部线条化（去填充底）：.wb-card-icon（书卡）、.wb-ri-scope/doc/link（条目页行图标）、
+  .wb-sp-icon（新建对话框范围行）、.wb-dialog-hero-icon（对话框图标头）→ 透明底 + inset 1.4px 描边 +
+  var(--text-2) 线条图标（选中态 .on 用 var(--text)）
+- 统计条缩小：padding 13/12→8/7.5px、数字 21.5→16px、标签 11→10px、圆角 15→12px、指示条 2.5→2px
+- 专属视角联系人下拉：根页导航右新增 .wb-ctbtn 胶囊（「全部角色」+ 下箭头），仅 curScope==='exclusive'
+  时显示（applyStats 控制 display + 同步标签）；点击弹 actionSheet（全部角色/信息APP好友，当前项 ✓ 前缀），
+  选择后 loadBooks 按 book.bound.includes(联系人) 过滤；离开专属筛选自动重置 curContact；
+  联系人无书时空态「「X」暂无专属世界书」
+- ui.js 弹层组件加可选 cls 参数（dialog/confirmDialog/promptDialog/sheet/actionSheet → mask 加类）；
+  worldbook.js 所有弹层调用传 cls:'wb-mono'；worldbook.css 新增
+  .wb-mono .action-sheet-btn:not(.danger)/.dialog-btns button:not(.danger) → var(--text)（原蓝 accent）、
+  .wb-mono .sheet-actions .btn-fill → 黑底白字（危险红保留）
+- 返回键黑色：.wb-page .nav-btn.chev.only{color:var(--text)}（原蓝）；条目页可点值（范围/绑定角色）
+  .wb-page .row-val.tappable → var(--text-2)（原蓝）
+- 新建世界书对话框复查：.wb-sp-name #8E8E93 灰、.wb-sp-desc text-3 灰（像素实测 rgb(142,142,147) ✓）
+- ChatSettings.tsx 专属世界书分组可收缩：表头行改 button（lore-collapse-head）+ Chevron 旋转指示
+  （lore-chev open=rotate90，.open）；默认展开；收缩时预览显示「共 N 本 · 已绑定 M 本」汇总
+- 端到端验证（agent-browser 桌面 + 390x844 移动 + VLM 截图分析 + 计算样式像素级断言）：
+  - 卡片顺序（DOM + VLM 双确认）：图标→名称→chip→开关→编辑→⋯ ✓；无横向溢出（桌面+移动）✓
+  - 统计条紧凑（VLM 确认）✓；+ 黑色 ✓；返回键 rgb(0,0,0) ✓（深色近白 ✓）
+  - 线条图标：计算样式 background rgba(0,0,0,0) + inset 描边 + VLM 确认「线条描边样式」✓
+  - 专属下拉：点底部「专属」chip → 下拉出现（display:flex、标签「全部角色」、黑色）→ 弹层含
+    全部角色/林小夏/陈默/苏晴（黑字）→ 选苏晴 → 标签=苏晴、列表过滤只剩「苏晴专属设定」✓；
+    选林小夏 → 空态「「林小夏」暂无专属世界书」✓；切回「全部」→ 下拉隐藏、curContact 重置 ✓
+  - 弹层黑灰化：更多菜单/范围切换菜单/联系人下拉 actionSheet 全部 rgb(0,0,0)（删除保留红）✓
+  - 新建对话框：范围名 rgb(142,142,147) 灰 ✓、图标头透明底+描边 ✓
+  - 聊天设置（React /?as=app）：专属世界书分组展开（2 本书）→ 点表头收缩（chevron 归位、
+    预览「共 2 本 · 已绑定 1 本」、书行隐藏）→ 再点展开 ✓；绑定开关回归（滚动后点击 →
+    on=true + toast 已绑定 + DB bound 写入，再关回原状）✓
+  - 移动端 390x844：卡片同行不溢出、筛选栏贴底 844、专属下拉可开可选 ✓；
+    深色模式：黑白灰协调无蓝色、下拉/加号白色清晰、开关近白轨道 ✓
+  - lint 0 error（3条既有 warning）；dev.log 全 200；双会话控制台零错误
+
+Stage Summary:
+- 八项调整全部落地：编辑/⋯ 在开关右面、前置图标线条样式、统计条缩小、专属筛选右上角联系人下拉、
+  新建对话框范围文字灰（复查通过）、返回键黑色、聊天设置专属世界书可收缩、世界书所有蓝色（返回键/
+  可点值/动作菜单/对话框按钮/底部面板完成键）全部黑灰化
+- 关键机制：ui.js 弹层组件新增 cls 通道（向后兼容），世界书弹层经 wb-mono 标记实现单色调覆写，
+  不影响其他 APP 的弹层配色
+- 修改文件：public/ios/js/core/ui.js、js/modules/worldbook.js、css/modules/worldbook.css、
+  src/cove/pages/ChatSettings.tsx、src/cove/index.css

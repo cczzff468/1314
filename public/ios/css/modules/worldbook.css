@@ -2,8 +2,18 @@
 
 .wb-body { padding: 4px 0 14px; }
 
-/* ---------- 导航按钮（右上 + / 保存）：黑色（深色模式近白） ---------- */
+/* ---------- 导航按钮（右上 + / 保存 / 联系人下拉）与返回键：黑色（深色模式近白） ---------- */
 .wb-page .nav-btn.pill-btn { color: var(--text); }
+.wb-page .nav-btn.chev.only { color: var(--text); }
+
+/* 专属视角：右上角联系人下拉胶囊 */
+.wb-ctbtn { padding: 0 11px; max-width: 118px; }
+.wb-ctbtn .wb-ct-name {
+  font-size: 13px; font-weight: 600;
+  max-width: 86px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wb-ctbtn svg { flex: none; opacity: .55; margin-left: 2px; }
 
 /* ---------- 开关：黑白灰覆写（开启=近黑轨道，深色模式=近白轨道） ---------- */
 .wb-body .switch.on { background: #1C1C1E; }
@@ -16,11 +26,11 @@ html[data-theme="dark"] .wb-body .switch.on::after { background: #000; box-shado
 .wb-hero-title { font-size: 23px; font-weight: 800; letter-spacing: -.4px; color: var(--text); }
 .wb-hero-sub { margin-top: 5px; font-size: 12.5px; color: var(--text-2); }
 
-/* ---------- 统计面板：全局 / 局部 / 专属 / 已启用 ---------- */
+/* ---------- 统计面板：全局 / 局部 / 专属 / 已启用（紧凑版） ---------- */
 .wb-stats {
-  margin: 2px 16px 13px;
+  margin: 2px 16px 11px;
   background: var(--card);
-  border-radius: 15px;
+  border-radius: 12px;
   box-shadow: var(--shadow-card);
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -30,12 +40,12 @@ html[data-theme="dark"] .wb-body .switch.on::after { background: #000; box-shado
   position: relative;
   border: none;
   background: transparent;
-  padding: 13px 2px 12px;
+  padding: 8px 2px 7.5px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3.5px;
+  gap: 2px;
   transition: background .18s ease;
   -webkit-tap-highlight-color: transparent;
 }
@@ -43,24 +53,24 @@ html[data-theme="dark"] .wb-body .switch.on::after { background: #000; box-shado
   content: '';
   position: absolute;
   left: 0;
-  top: 24%;
-  bottom: 24%;
+  top: 22%;
+  bottom: 22%;
   width: .5px;
   background: var(--sep-flat);
 }
 html[data-theme="dark"] .wb-stat::before { background: rgba(255, 255, 255, .12); }
 .wb-stat:first-child::before { display: none; }
 .wb-stat-num {
-  font-size: 21.5px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.05;
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 .wb-stat-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
-  letter-spacing: .5px;
+  letter-spacing: .4px;
   color: var(--text-2);
 }
 /* 筛选中：淡底 + 顶部黑条指示 */
@@ -71,7 +81,7 @@ html[data-theme="dark"] .wb-stat::before { background: rgba(255, 255, 255, .12);
   top: 0;
   left: 27%;
   right: 27%;
-  height: 2.5px;
+  height: 2px;
   border-radius: 0 0 3px 3px;
   background: var(--text);
 }
@@ -127,22 +137,20 @@ html[data-theme="dark"] .wb-stat::before { background: rgba(255, 255, 255, .12);
 .wb-card.off .wb-scope-chip,
 .wb-card.off .wb-act-btn { opacity: .4; }
 .wb-card-head { display: flex; align-items: center; gap: 8px; }
+/* 前置图标：线条样式（无填充底，描边+灰线条） */
 .wb-card-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 9.5px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8.5px;
   flex: none;
-  color: #fff;
+  color: var(--text-2);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(160deg, #48484A, #1C1C1E);
+  background: transparent;
+  box-shadow: inset 0 0 0 1.4px var(--sep);
 }
-.wb-card-icon.s-local { background: linear-gradient(160deg, #AEAEB2, #8E8E93); }
-.wb-card-icon.s-exclusive { background: var(--fill-2); color: var(--text-2); }
-html[data-theme="dark"] .wb-card-icon { background: linear-gradient(160deg, #545456, #2C2C2E); }
-html[data-theme="dark"] .wb-card-icon.s-local { background: linear-gradient(160deg, #7C7C80, #58585A); }
-.wb-card-icon svg { width: 19px; height: 19px; }
+.wb-card-icon svg { width: 18px; height: 18px; }
 .wb-card-name { font-size: 16.5px; font-weight: 650; color: var(--text); min-width: 0; }
 /* 范围 chip：灰阶三档（黑底白字 / 中灰 / 描边） */
 .wb-scope-chip {
@@ -160,9 +168,10 @@ html[data-theme="dark"] .wb-card-icon.s-local { background: linear-gradient(160d
 .wb-scope-chip.s-exclusive { background: transparent; color: var(--text-2); box-shadow: inset 0 0 0 1px var(--sep); }
 html[data-theme="dark"] .wb-scope-chip.s-global { background: #EBEBF0; color: #000; }
 html[data-theme="dark"] .wb-scope-chip.s-local { background: #636366; color: #fff; }
-.wb-card .switch { margin-left: 1px; }
+/* 开关居右，「编辑」「更多」在其右侧 */
+.wb-card .switch { margin-left: auto; }
 .wb-card-meta {
-  margin: 9px 0 0 46px;
+  margin: 8px 0 0 42px;
   font-size: 12.5px;
   color: var(--text-2);
   display: flex;
@@ -210,12 +219,12 @@ html[data-theme="dark"] .wb-scope-chip.s-local { background: #636366; color: #ff
   color: var(--text-2);
 }
 .wb-form-note { font-size: 11.5px; color: var(--text-3); margin: 7px 4px 0; line-height: 1.45; }
-/* 行图标：灰阶三档 */
-.wb-ri-scope { background: #1C1C1E; }
-.wb-ri-doc { background: #8E8E93; }
-.wb-ri-link { background: transparent; color: var(--text-2); box-shadow: inset 0 0 0 1.5px var(--sep); }
-html[data-theme="dark"] .wb-ri-scope { background: #48484A; }
-html[data-theme="dark"] .wb-ri-doc { background: #636366; }
+/* 行图标：线条样式（无填充底） */
+.wb-ri-scope, .wb-ri-doc, .wb-ri-link {
+  background: transparent;
+  color: var(--text-2);
+  box-shadow: inset 0 0 0 1.4px var(--sep);
+}
 
 .wb-new-entry {
   display: block;
@@ -308,14 +317,13 @@ html[data-theme="dark"] .wb-ri-doc { background: #636366; }
   width: 52px;
   height: 52px;
   border-radius: 14px;
-  background: linear-gradient(160deg, #48484A, #1C1C1E);
-  color: #fff;
+  background: transparent;
+  color: var(--text-2);
+  box-shadow: inset 0 0 0 1.4px var(--sep);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, .22);
 }
-html[data-theme="dark"] .wb-dialog-hero-icon { background: linear-gradient(160deg, #545456, #2C2C2E); }
 .wb-dialog-hero-icon svg { width: 27px; height: 27px; }
 .wb-dialog-title { margin-top: 13px; font-size: 17.5px; font-weight: 700; color: var(--text); }
 .wb-dialog-sub { margin-top: 4px; font-size: 12px; color: var(--text-2); }
@@ -365,15 +373,14 @@ html[data-theme="dark"] .wb-dialog-foot .wb-btn.fill { background: #EBEBF0; colo
   height: 31px;
   border-radius: 8.5px;
   flex: none;
-  background: #1C1C1E;
-  color: #fff;
+  background: transparent;
+  color: var(--text-2);
+  box-shadow: inset 0 0 0 1.4px var(--sep);
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.wb-sp-row:not(.on) .wb-sp-icon { background: #8E8E93; }
-html[data-theme="dark"] .wb-sp-icon { background: #48484A; }
-html[data-theme="dark"] .wb-sp-row:not(.on) .wb-sp-icon { background: #636366; }
+.wb-sp-row.on .wb-sp-icon { color: var(--text); }
 .wb-sp-info { display: flex; flex-direction: column; gap: 2.5px; min-width: 0; flex: 1; }
 /* 范围选择行文字：灰色（选中项也保持灰，仅边框/勾选标识选中） */
 .wb-sp-name { font-size: 14.5px; font-weight: 600; color: #8E8E93; }
@@ -444,6 +451,15 @@ html[data-theme="dark"] .wb-sp-name { color: rgba(235, 235, 245, .55); }
 }
 .wb-textarea::placeholder { color: var(--text-3); }
 .wb-save-btn { font-weight: 650; font-size: 15px; padding: 0 3px; }
+
+/* ---------- 黑白灰覆写：世界书弹出的所有系统弹层（actionSheet / 对话框 / 底部面板） ----------
+   ui.js 的弹层挂在 #screen 下（不在 .wb-page 内），通过 cls:'wb-mono' 打标记后在此覆写 */
+.wb-mono .action-sheet-btn:not(.danger) { color: var(--text); }
+.wb-mono .dialog-btns button:not(.danger) { color: var(--text); }
+.wb-mono .sheet-actions .btn-fill { background: #1C1C1E; color: #fff; }
+html[data-theme="dark"] .wb-mono .sheet-actions .btn-fill { background: #EBEBF0; color: #000; }
+/* 条目页可点值（范围/绑定角色）：灰 */
+.wb-page .row-val.tappable { color: var(--text-2); }
 
 /* ---------- 绑定角色底部面板 ---------- */
 .wb-bind-body { padding-bottom: 6px; }

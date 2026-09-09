@@ -37,9 +37,10 @@ export default function ChatSettings({
   const [tick, setTick] = useState(0)
   void tick
 
-  /* 专属世界书：从「世界书」APP 的库中读出，按角色绑定/解绑 */
+  /* 专属世界书：从「世界书」APP 的库中读出，按角色绑定/解绑（分组可收缩） */
   const [lorebooks, setLorebooks] = useState<ExclusiveBook[]>([])
   const [loreLoaded, setLoreLoaded] = useState(false)
+  const [loreOpen, setLoreOpen] = useState(true)
 
   useEffect(() => {
     let alive = true
@@ -77,6 +78,12 @@ export default function ChatSettings({
         showHint('保存失败，请重试')
       }
     })
+  }
+
+  const loreSummary = (): string => {
+    if (!lorebooks.length) return '还没有专属世界书'
+    const bound = lorebooks.filter((b) => b.bound).length
+    return `共 ${lorebooks.length} 本 · 已绑定 ${bound} 本`
   }
 
   const BURST_OPTIONS = [1, 5, 10, 15, 20, 25, 30]
@@ -223,27 +230,34 @@ export default function ChatSettings({
         </div>
 
         <div className="list-group">
-          <div className="row">
+          <button className="row lore-collapse-head" onClick={() => { setLoreOpen((v) => !v) }} aria-expanded={loreOpen}>
             <div className="row-main">
               <span className="row-title">专属世界书</span>
-              <span className="row-preview">选择对本角色生效的专属世界书，命中关键词时自动注入设定</span>
+              <span className="row-preview">{loreOpen ? '选择对本角色生效的专属世界书，命中关键词时自动注入设定' : loreSummary()}</span>
             </div>
-          </div>
-          {lorebooks.map((b) => (
-            <div className="row" key={b.id}>
-              <div className="row-main">
-                <span className="row-title">{b.name}</span>
-                <span className="row-preview">{lorePreview(b)}</span>
-              </div>
-              <Switch on={b.bound} onChange={(v) => toggleLorebook(b, v)} />
-            </div>
-          ))}
-          {loreLoaded && !lorebooks.length && (
-            <div className="row">
-              <div className="row-main">
-                <span className="row-preview">还没有专属世界书，可在主屏「世界书」APP 中创建</span>
-              </div>
-            </div>
+            <span className={`lore-chev ${loreOpen ? 'open' : ''}`}>
+              <Chevron />
+            </span>
+          </button>
+          {loreOpen && (
+            <>
+              {lorebooks.map((b) => (
+                <div className="row" key={b.id}>
+                  <div className="row-main">
+                    <span className="row-title">{b.name}</span>
+                    <span className="row-preview">{lorePreview(b)}</span>
+                  </div>
+                  <Switch on={b.bound} onChange={(v) => toggleLorebook(b, v)} />
+                </div>
+              ))}
+              {loreLoaded && !lorebooks.length && (
+                <div className="row">
+                  <div className="row-main">
+                    <span className="row-preview">还没有专属世界书，可在主屏「世界书」APP 中创建</span>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 
