@@ -637,3 +637,36 @@ Stage Summary:
   page-body 文档流 + 胶囊按钮），钱包其他页面（零钱/收款码/扫码 rp-sheet 按钮等
   flex:1 用法均在横排容器内）不受影响
 - 修改文件：src/cove/index.css
+
+---
+Task ID: 15
+Agent: Z.ai Code (主控)
+Task: 钱包页入口重排：账单移到导航右上角（文字按钮），支付密码移到页底「微信安全支付」下方
+
+Work Log:
+- WalletHome.tsx：
+  - 导航 right 由支付密码锁图标按钮改为「账单」文字按钮（wallet-bills-btn，
+    onClick onOpen('bills')，aria-label=账单）
+  - 服务列表删除账单行（原5行 → 4行：零钱/零钱通/亲属卡/银行卡），票据图标随之移除
+  - 页脚「微信安全支付」下方新增 wallet-pwd-link 按钮（12px 锁图标 currentColor
+    描边 + 「支付密码」文字，onClick onOpenPassword）
+- index.css：
+  - 新增 .wallet-bills-btn（覆盖 .nav-btn 36×36 圆形：width/height auto、
+    radius 8px、padding 3px 6px、15px/500 字重、#576b95 蓝灰——与原锁图标同色系）
+  - 新增 .wallet-pwd-link（居中小入口：12px 字号 #9aa4b2 与页脚同色、
+    margin 2px auto、:active 浅灰底反馈）+ 注释
+  - 删除废弃 .wallet-pwd-btn（padding:4px，已无引用）
+- 端到端验证（agent-browser 390x844，iOS 壳层内嵌 iframe + /?as=app 直开双路径）：
+  - 右上角「账单」：42×25、right=378 右对齐、rgb(87,107,149) ✓；
+    点击 → 账单页打开（7 chips 全部可见，换行修复保持）✓
+  - 服务列表：4 行、无账单行 ✓
+  - 「支付密码」：位于微信安全支付正下方（footer.bottom < pwd.top）✓；
+    点击 → 支付密码设置页（「开启支付密码」）✓ → 返回钱包 ✓
+  - VLM 截图审查四项全部确认：右上角账单按钮位置合适无重叠、列表严格4行、
+    底部支付密码入口存在、整页无重叠溢出错位
+  - 控制台零错误、dev.log 全 200、lint 0 error（3条既有 warning）
+
+Stage Summary:
+- 钱包页信息架构微调完成：账单升为导航级入口（右上角文字按钮，微信蓝灰），
+  支付密码下沉为页脚附属入口（安全支付语下方，低调灰），服务列表精简为 4 行
+- 修改文件：src/cove/pages/wallet/WalletHome.tsx、src/cove/index.css

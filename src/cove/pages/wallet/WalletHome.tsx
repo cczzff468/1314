@@ -74,17 +74,6 @@ export default function WalletHome({
         </svg>
       ),
     },
-    {
-      key: 'bills',
-      name: '账单',
-      desc: '收支明细',
-      icon: line(
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M6 4.5h12v15l-3-1.8-3 1.8-3-1.8-3 1.8v-15Z" />
-          <path d="M9 9h6M9 12.5h6" />
-        </svg>
-      ),
-    },
   ]
 
   return (
@@ -97,12 +86,8 @@ export default function WalletHome({
           </button>
         }
         right={
-          <button className="nav-btn wallet-pwd-btn" onClick={onOpenPassword} aria-label="支付密码">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <rect x="5" y="10.5" width="14" height="9" rx="2.4" stroke="#576b95" strokeWidth="1.7" />
-              <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" stroke="#576b95" strokeWidth="1.7" />
-              <circle cx="12" cy="15" r="1.4" fill="#576b95" />
-            </svg>
+          <button className="nav-btn wallet-bills-btn" onClick={() => onOpen('bills')} aria-label="账单">
+            账单
           </button>
         }
       />
@@ -177,6 +162,13 @@ export default function WalletHome({
           </span>
           微信安全支付
         </div>
+        <button className="wallet-pwd-link" onClick={onOpenPassword}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+            <rect x="5" y="10.5" width="14" height="9" rx="2.4" stroke="currentColor" strokeWidth="1.7" />
+            <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+          </svg>
+          支付密码
+        </button>
       </div>
     </div>
   )
