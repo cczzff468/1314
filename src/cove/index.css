@@ -5554,11 +5554,10 @@ button:disabled {
 }
 .bills-filter {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 10px 14px;
   background: #ededed;
-  overflow-x: auto;
-  white-space: nowrap;
 }
 .bills-chip {
   border: none;
@@ -6784,6 +6783,17 @@ button:disabled {
 .relative-page .page-body,
 .transfer-page .page-body {
   background: transparent;
+}
+/* 零钱通开通页：page-body 恢复普通文档流 —— 上面的 .fund-page .page-body 纵向 flex
+   会把 flex:1 的「开通零钱通」按钮压缩成扁长条，其余子项也会被 flex-shrink 压扁；
+   开通按钮改胶囊圆角（仿微信） */
+.fund-open-page .page-body {
+  display: block;
+}
+.fund-open-page .fund-open-btn {
+  display: block;
+  width: 100%;
+  border-radius: 999px;
 }
 
 /* 加号面板毛玻璃 */

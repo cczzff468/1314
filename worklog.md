@@ -597,3 +597,43 @@ Stage Summary:
   等全部钱包数据不被默认值覆盖回写）+ localStorage 同步镜像双保险；重载/HMR/会话内
   三种路径均不再重复弹开通页
 - 修改文件：src/cove/index.css、src/cove/pages/wallet/ChangeFund.tsx、src/cove/store.ts
+
+---
+Task ID: 14
+Agent: Z.ai Code (主控)
+Task: 修复两处钱包 UI 回归：①零钱通开通页底部「开通零钱通」按钮变成长方形 ②账单页筛选 chips 被挡住（横向溢出截断）
+
+Work Log:
+- 问题①定位：`.fund-page .page-body` 全局规则（index.css ~6774）把开通页滚动容器设为
+  纵向 flex；开通按钮 `btn-orange-big fund-open-btn` 自带 `flex:1`（本为 fund-actions
+  横排双按钮设计），在纵向容器里 flex-basis:0% → 按钮被压缩成 362×21 扁长条（实测
+  height=21px），且其余子项被默认 flex-shrink 压扁
+- 问题①修复（index.css）：新增 `.fund-open-page .page-body { display: block }`（恢复
+  文档流，子项不再被压扁，内容超高走滚动）+ `.fund-open-page .fund-open-btn
+  { display:block; width:100%; border-radius:999px }`（全宽胶囊形仿微信；因
+  .btn-orange-big 在文件后部同优先级会覆盖，用 .fund-open-page 前缀提高优先级）；
+  均放在全局 flex 规则之后确保级联生效
+- 问题②定位：账单页 `.bills-filter` 7 个 chips 总宽 519px > 视口 390px，
+  `overflow-x:auto + nowrap` 导致「亲属卡」「充值提现」两个选项被挡在屏幕外
+  （实测 right=417/505 均超出 390）
+- 问题②修复（index.css）：`.bills-filter` 改 `flex-wrap: wrap`，删除
+  `overflow-x:auto / white-space:nowrap` → chips 自动换行为两行（5+2）全部可见
+- 端到端验证（agent-browser 390x844 + 计算样式 + VLM + 壳层冒烟）：
+  - 开通按钮：362×46、radius 999px、完全可见（top788-bottom834）✓；VLM 确认
+    「全宽圆角胶囊形（药丸形），符合要求，无重叠溢出」✓
+  - 开通流程回归：取消勾选协议→开通→toast 拦截「请先阅读并同意相关协议」✓；
+    勾选→开通→toast「零钱通已开通」+主页 ¥1,288.07 ✓；主页转出/转入按钮
+    159×46 不受影响（fund-actions 横排 flex 保留）✓
+  - 账单筛选：7 chips 全部可见（两行：全部/红包/转账/收付款/零钱通 + 亲属卡/
+    充值提现），filter 区 108-196 ✓；VLM 确认「7 个选项均完整可见，无截断」✓
+  - chip 交互：点「充值提现」→ 高亮+过滤空态 ✓；点「全部」→ 恢复 1 组 ✓
+  - iOS 壳层集成（/ 根路由 → 信息 APP iframe /?as=app）：账单页在 390px 内嵌
+    iframe 中 7 chips 全部可见、wrap 生效 ✓
+  - 控制台零错误（仅 HMR 日志）、dev.log 全 200、lint 0 error（3条既有 warning）
+
+Stage Summary:
+- 双 bug 根因均为 CSS 级：纵向 flex 容器 + flex:1 按钮冲突；横向溢出 + nowrap 截断
+- 修复仅动 src/cove/index.css 两处（.bills-filter 换行、.fund-open-page 专属
+  page-body 文档流 + 胶囊按钮），钱包其他页面（零钱/收款码/扫码 rp-sheet 按钮等
+  flex:1 用法均在横排容器内）不受影响
+- 修改文件：src/cove/index.css
