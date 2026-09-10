@@ -37,8 +37,15 @@ export function micErrMsg(e: unknown): string {
   if (/InvalidState/i.test(name)) {
     return '录音会话状态异常：请再点一次重试'
   }
+  /* 应用自身在识别/解码等阶段抛的友好错误是普通 Error（name === 'Error'
+     或空）+ 中文消息。此前这类错误在这里被兜底文案掩盖成「无法启动
+     录音」，导致诊断全绿却报录音失败——现在直接透传真实原因 */
+  const msg = String((e as Error)?.message || '')
+  if ((!name || name === 'Error') && msg && /[\u4e00-\u9fff]/.test(msg)) {
+    return msg
+  }
   /* 兜底：带上原始错误名，方便反馈定位（正常情况不该走到这里） */
-  const detail = name || String((e as Error)?.message || '').slice(0, 24)
+  const detail = name || msg.slice(0, 24)
   return detail
     ? `无法启动录音（${detail}）：请重试；持续失败请反馈括号里的内容`
     : '无法启动录音，请检查麦克风后重试'
@@ -131,6 +138,24 @@ export async function diagnoseMic(): Promise<string> {
       lines.push('结论：未知错误，请截图这段检测结果反馈')
     }
     return lines.join('\n')
+  }
+}
+
+/** 识别后端可达性预检：GET /api/asr（不走录音，几十字节即出结果）。
+    部署环境用它区分「后端没部署/代理未转发」与「麦克风问题」，
+    还能顺带探到 Cloudflare 等代理层的转发是否正常 */
+export async function checkAsrBackend(): Promise<string> {
+  if (typeof window === 'undefined') return '识别后端：未知'
+  try {
+    const res = await fetch('/api/asr', { method: 'GET' })
+    if (res.ok) {
+      const data = (await res.json().catch(() => null)) as { ok?: boolean } | null
+      return data?.ok ? '识别后端：在线（/api/asr 可达）' : '识别后端：响应异常（返回了非预期内容）'
+    }
+    if (res.status === 404) return '识别后端：404（当前部署没有 /api/asr 后端，纯静态托管无法语音识别）'
+    return `识别后端：HTTP ${res.status}（代理或后端异常）`
+  } catch {
+    return '识别后端：无法连接（网络不通或被代理拦截）'
   }
 }
 

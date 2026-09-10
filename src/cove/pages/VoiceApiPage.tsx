@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavBar, Modal } from '../components/common'
 import { loadApiSetting, saveApiSetting, uid } from '../store'
 import { testTtsConnection } from '../utils/apiTest'
-import { VoiceRecorder, diagnoseMic, micErrMsg } from '../utils/asr'
+import { VoiceRecorder, diagnoseMic, micErrMsg, checkAsrBackend } from '../utils/asr'
 import type { ApiSetting, VoiceConfig } from '../types'
 
 const PROVIDER_LIST = ['OpenAI', 'Minimax 国内版', 'Minimax 国际版', '本地免费 (Edge TTS)']
@@ -314,14 +314,14 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
     }
   }
 
-  /* 麦克风一键诊断：环境（HTTPS）→ 设备枚举 → 实录测试，直接给出
-     可照着做的结论；测试失败时也会自动跑一遍 */
+  /* 麦克风一键诊断：环境（HTTPS）→ 设备枚举 → 实录测试 → 后端可达性，
+     直接给出可照着做的结论；测试失败时也会自动跑一遍 */
   const runMicDiag = async () => {
     if (micDiaging) return
     setMicDiaging(true)
     setMicDiag('检测中…')
     try {
-      setMicDiag(await diagnoseMic())
+      setMicDiag((await diagnoseMic()) + '\n' + (await checkAsrBackend()))
     } catch {
       setMicDiag('检测失败：浏览器异常，请刷新页面重试')
     } finally {
@@ -335,16 +335,27 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
     if (sttTesting) return
     setSttTesting(true)
     try {
+      /* 先探后端可达性（GET /api/asr，几毫秒）：后端不在就直接报因，
+         不浪费 5 秒录音等待，也把「部署问题」和「麦克风问题」分开 */
+      const backend = await checkAsrBackend()
+      if (!backend.includes('在线')) throw new Error(backend.replace('识别后端：', ''))
       const text = await runServerSttTest()
       showResult(`测试通过（服务端识别）：${text.slice(0, 24)}${text.length > 24 ? '…' : ''}`)
     } catch (e) {
       console.warn('[voice] 语音输入测试失败：', e)
       const msg = String((e as Error)?.name || '') + ' ' + String((e as Error)?.message || '')
       if (!/太短|没有录到/.test(msg)) {
-        /* 麦克风/权限类问题：提示 + 自动跑诊断，把真实原因展示在下方 */
-        showHint(micErrMsg(e))
+        /* 失败原因先落 toast，再持久写进下方诊断面板（含真实原因，
+           手机上没有控制台也能看到），并自动跑一遍环境检测 */
+        const reason = micErrMsg(e)
+        showHint(reason)
         try {
-          setMicDiag('测试失败，已自动检测：\n' + (await diagnoseMic()))
+          setMicDiag(
+            `测试失败原因：${reason}\n\n自动检测：\n` +
+              (await diagnoseMic()) +
+              '\n' +
+              (await checkAsrBackend())
+          )
         } catch {
           /* 诊断失败不影响提示 */
         }

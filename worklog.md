@@ -1431,3 +1431,43 @@ Stage Summary:
   精确错误名；若 /api/asr 报 404/返回网页，说明该部署为纯静态
   托管（无后端），语音识别本身不可用——Cloudflare 只影响这一段
   （API 转发），不影响浏览器本地麦克风
+
+---
+Task ID: 34
+Agent: main (Z.ai Code)
+Task: 诊断截图显示「麦克风全绿却报无法启动录音（Error）」——揭开被 micErrMsg 掩盖的真实失败原因
+
+Work Log:
+- 用 VLM 读取用户截图（Screenshot_20260910_084956.jpg）：设置页
+  诊断输出全绿（HTTPS/3 设备/取麦成功/实测录音支持/结论麦克风正常），
+  但 toast 报「无法启动录音（Error）：请重试…」
+- 根因：testStt 的 catch 把「识别/解码阶段」的错误也送进 micErrMsg
+  按错误名分类，而这类错误是普通 Error（name 恰好为 "Error"）+
+  中文消息 → 落进兜底分支，真实消息被丢弃、换成「无法启动录音」
+  ——麦克风其实完全正常，失败在 /api/asr 上传（用户网络仅
+  17.7 KB/s）或部署后端/代理
+- 修复 src/cove/utils/asr.ts micErrMsg：name 为空/"Error" 且消息
+  含中文的应用自身分阶段错误直接透传（不再被兜底掩盖）
+- 新增 checkAsrBackend()：GET /api/asr 预检后端可达性（404/HTTP
+  异常/无法连接三类），几十字节即出结果，顺带探 Cloudflare 转发
+- VoiceApiPage：testStt 先预检后端（不在线立即报因，不浪费 5 秒
+  录音）；失败原因持久写进诊断面板「测试失败原因：…」（手机无
+  控制台也能看到）；麦克风检测面板追加「识别后端」状态行
+- lint 0 error；agent-browser 四场景验证：
+  · 后端 404：点测试连接立即显示「测试失败原因：404（当前部署
+    没有 /api/asr 后端，纯静态托管无法语音识别）」+ 面板含
+    「识别后端：404…」行 ✓
+  · 用户场景复现（麦克风全绿+GET 在线+POST 网络失败）：如实报
+    「测试失败原因：识别服务连接失败：请检查网络后重试」，
+    不再显示「无法启动录音」✓
+  · 全链路成功：「测试通过（服务端识别）：部署链路一切正常」✓
+  · 聊天页回归：录音→停止→识别→文字落输入框 ✓
+- 页面零 JS 错误；dev.log 全 200（含 /api/asr GET 探活请求）
+
+Stage Summary:
+- 修改文件：src/cove/utils/asr.ts、src/cove/pages/VoiceApiPage.tsx
+- 用户部署环境已证明：HTTPS/麦克风/权限/录音编码全部正常，
+  问题只可能在 /api/asr 网络段（部署无后端、Cloudflare 未转发
+  POST、或慢网络上传失败）
+- 下一步等用户重新部署后点「测试连接」：面板会直接给出真实
+  失败原因（404 无后端 / HTTP 5xx / 无法连接），按原因对症处理
