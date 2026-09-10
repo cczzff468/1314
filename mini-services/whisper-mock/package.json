@@ -1,0 +1,8 @@
+{
+  "name": "whisper-mock",
+  "version": "1.0.0",
+  "description": "模拟 whisper-asr-webservice 的本地测试桩（端口 9010）",
+  "scripts": {
+    "dev": "bun --hot index.ts"
+  }
+}

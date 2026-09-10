@@ -1500,3 +1500,41 @@ Stage Summary:
 - 部署侧三种失败模式现在全部可被「测试连接」一键区分：
   404（纯静态托管无后端）/ 503（有后端但 ASR 未配置）/
   5xx 或无法连接（代理/网络）
+
+---
+Task ID: 36
+Agent: main (Z.ai Code)
+Task: 接入用户指定的 whisper-asr-webservice 作为自托管识别后端（部署环境免密钥方案）
+
+Work Log:
+- 阅读 GitHub 仓库 ahmetoner/whisper-asr-webservice（Whisper ASR Box）
+  与官方文档：Docker 自托管、免费无密钥、支持中文、POST /asr 收
+  multipart audio_file、output=json 返回 {text,segments,language}、
+  FFmpeg 兼容任意音频格式、/openapi.json 可探活
+- 重写 src/app/api/asr/route.ts 双后端：
+  · ASR_BACKEND_URL 环境变量（如 http://127.0.0.1:9000）→ multipart
+    转发到 Whisper 的 /asr?output=json&task=transcribe（120s 超时）
+  · 未设置 → 原 z-ai SDK 路径（开发环境默认）
+  · GET 健康检查按模式探活：Whisper 模式探 /openapi.json（3s 超时），
+    返回 backend: whisper|zai；两类配置/不可达均 503+具体原因
+  · 路由注释内嵌 Docker 启动命令（faster_whisper+small，CPU 可跑）
+- checkAsrBackend 显示后端类型：在线（Whisper 自托管 / 服务端 SDK）
+- 新增 mini-services/whisper-mock（bun 独立项目，端口 9010）模拟
+  Whisper 的 /asr 与 /openapi.json，用于本地验证转发逻辑
+- 验证（全部通过）：
+  · 带 ASR_BACKEND_URL 重启 dev：GET /api/asr → {ok,backend:"whisper"}；
+    POST 真实 WAV（32044 字节静音）→ multipart 到 mock → 返回其 text，
+    mock 日志确认 task=transcribe ✓
+  · 浏览器端到端（fetch 不 mock）：聊天页录音→停止→WAV→真实
+    /api/asr→Whisper 转发→文字落入输入框 ✓
+  · 设置页「测试连接」面板显示「识别后端：在线（Whisper 自托管，
+    /api/asr 可达）」✓
+  · 恢复默认模式重启：GET → backend:zai、首页 200 无回归 ✓
+- lint 0 error；dev.log 干净
+
+Stage Summary:
+- 修改：src/app/api/asr/route.ts、src/cove/utils/asr.ts；
+  新增 mini-services/whisper-mock/
+- 用户部署方案就绪：Docker 起 whisper-asr-webservice（免费、无密钥、
+  中文支持）+ 设 ASR_BACKEND_URL 即完成语音识别自托管，
+  前端零改动；密钥不随仓库分发的部署死结解除

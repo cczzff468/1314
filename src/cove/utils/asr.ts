@@ -148,8 +148,11 @@ export async function checkAsrBackend(): Promise<string> {
   if (typeof window === 'undefined') return '识别后端：未知'
   try {
     const res = await fetch('/api/asr', { method: 'GET' })
-    const data = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null
-    if (res.ok && data?.ok) return '识别后端：在线（/api/asr 可达）'
+    const data = (await res.json().catch(() => null)) as { ok?: boolean; backend?: string; error?: string } | null
+    if (res.ok && data?.ok) {
+      const kind = data.backend === 'whisper' ? 'Whisper 自托管' : '服务端 SDK'
+      return `识别后端：在线（${kind}，/api/asr 可达）`
+    }
     if (res.status === 404) return '识别后端：404（当前部署没有 /api/asr 后端，纯静态托管无法语音识别）'
     /* 503 等场景后端会带回具体原因（如服务器缺少 .z-ai-config） */
     if (data?.error) return `识别后端：${data.error}`
