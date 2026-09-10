@@ -1471,3 +1471,32 @@ Stage Summary:
   POST、或慢网络上传失败）
 - 下一步等用户重新部署后点「测试连接」：面板会直接给出真实
   失败原因（404 无后端 / HTTP 5xx / 无法连接），按原因对症处理
+
+---
+Task ID: 35
+Agent: main (Z.ai Code)
+Task: 解答「服务端 API 是什么」并堵住部署侧最后一个盲区——SDK 配置缺失可被预检发现
+
+Work Log:
+- 查 z-ai-web-dev-sdk 源码：ZAI.create() 读取 .z-ai-config
+  （baseUrl+apiKey，位于项目根/家目录//etc，已被 .gitignore 排除）
+  → 部署到新环境若无此文件，/api/asr 会 500（Configuration
+  file not found），这是「完整 Node 部署也失败」的隐藏根因
+- route.ts GET 健康检查升级：ZAI.create() 实测初始化，配置缺失
+  返回 503 + 具体原因（不再只报路由存在）
+- route.ts POST：SDK 配置类异常单独映射为 503 +
+  「服务器缺少 .z-ai-config 配置」可照做提示
+- checkAsrBackend：透传后端带回的 error 文本（覆盖 503 未配置）
+- lint 0 error；curl 实测 GET /api/asr → {ok:true}（沙箱内正常）；
+  agent-browser 模拟 503 未配置：点「测试连接」立即显示
+  「测试失败原因：ASR 服务未配置：服务器缺少 .z-ai-config…」
+  且面板「识别后端」行同步显示 ✓
+
+Stage Summary:
+- 修改文件：src/app/api/asr/route.ts、src/cove/utils/asr.ts
+- 语音识别服务端 API：应用自身 /api/asr 路由（Node runtime）→
+  z-ai-web-dev-sdk 的 zai.audio.asr.create({ file_base64 })，
+  鉴权依赖 .z-ai-config（不随仓库分发）
+- 部署侧三种失败模式现在全部可被「测试连接」一键区分：
+  404（纯静态托管无后端）/ 503（有后端但 ASR 未配置）/
+  5xx 或无法连接（代理/网络）

@@ -148,11 +148,11 @@ export async function checkAsrBackend(): Promise<string> {
   if (typeof window === 'undefined') return '识别后端：未知'
   try {
     const res = await fetch('/api/asr', { method: 'GET' })
-    if (res.ok) {
-      const data = (await res.json().catch(() => null)) as { ok?: boolean } | null
-      return data?.ok ? '识别后端：在线（/api/asr 可达）' : '识别后端：响应异常（返回了非预期内容）'
-    }
+    const data = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null
+    if (res.ok && data?.ok) return '识别后端：在线（/api/asr 可达）'
     if (res.status === 404) return '识别后端：404（当前部署没有 /api/asr 后端，纯静态托管无法语音识别）'
+    /* 503 等场景后端会带回具体原因（如服务器缺少 .z-ai-config） */
+    if (data?.error) return `识别后端：${data.error}`
     return `识别后端：HTTP ${res.status}（代理或后端异常）`
   } catch {
     return '识别后端：无法连接（网络不通或被代理拦截）'

@@ -30,10 +30,32 @@ export async function POST(req: Request) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error('[api/asr]', msg)
+    /* SDK 配置缺失是部署后最常见故障，单独给出可照做的提示 */
+    if (/Configuration file not found|invalid/i.test(msg)) {
+      return Response.json(
+        { error: '服务器缺少 .z-ai-config 配置（ASR 密钥未随仓库分发），请部署时自行配置或改接其他识别服务商' },
+        { status: 503 }
+      )
+    }
     return Response.json({ error: `语音识别失败：${msg.slice(0, 200)}` }, { status: 500 })
   }
 }
 
 export async function GET() {
-  return Response.json({ ok: true, endpoint: '/api/asr' })
+  /* 健康检查：不仅路由存在，还要验证 SDK 配置可用（.z-ai-config
+     不在仓库里，部署到新环境若未配置，语音识别会 500） */
+  try {
+    await ZAI.create()
+    return Response.json({ ok: true, endpoint: '/api/asr' })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[api/asr] 初始化失败：', msg)
+    return Response.json(
+      {
+        ok: false,
+        error: 'ASR 服务未配置：服务器缺少 .z-ai-config（含 baseUrl/apiKey，被 .gitignore 排除），需在部署服务器上自行配置或改接其他识别服务商',
+      },
+      { status: 503 }
+    )
+  }
 }
