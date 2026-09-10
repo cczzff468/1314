@@ -4,17 +4,23 @@
    只依赖「麦克风 + 应用自身后端」，不依赖浏览器 SpeechRecognition，
    在受限网络下最稳。
    （曾内置双引擎：浏览器 Web Speech API 优先 + 服务端回退；因多数
-   大陆网络无法访问浏览器语音服务、引擎起不来，按需求仅保留此引擎。） */
+   大陆网络无法访问浏览器语音服务、引擎起不来，按需求仅保留此引擎。）
 
-/** 麦克风类错误分类：把 getUserMedia 异常转成「用户能照着做」的提示。
+   错误报告原则：麦克风拿不到 ≠ 录音编码不支持 ≠ 识别服务不可用。
+   每个阶段单独分类，兜底文案带上原始错误名（如 AbortError），
+   用户看到「无法启动录音（xxxError）」即可定位真实环节，
+   不再笼统报「请检查麦克风」掩盖真实原因。 */
+
+/** 麦克风类错误分类：把 getUserMedia/录音启动异常转成「用户能照着做」的提示。
     注意区分两件事：app 里的「语音输入开关」只管功能开没开；
     这里的错误是浏览器/系统层面拿不到录音设备，与开关无关 */
 export function micErrMsg(e: unknown): string {
   const name = String((e as Error)?.name || '')
+  const embedded = typeof window !== 'undefined' && window !== window.top
   if (/NotAllowed|Permission|Security/i.test(name)) {
-    return typeof window !== 'undefined' && window !== window.top
+    return embedded
       ? '麦克风权限被拒：本页嵌在框架里，请用「新标签页打开」后再允许麦克风'
-      : '麦克风权限被拒：请在浏览器地址栏左侧的站点设置里允许麦克风后重试'
+      : '麦克风权限被拒：地址栏左侧锁图标 → 麦克风 → 允许后重试'
   }
   if (/NotFound/i.test(name)) {
     return '浏览器找不到可用麦克风：请到 系统-声音-输入 换默认设备（蓝牙耳机断开常残留），并检查 Windows 麦克风隐私设置'
@@ -22,10 +28,24 @@ export function micErrMsg(e: unknown): string {
   if (/NotReadable/i.test(name)) {
     return '麦克风被占用：请关闭正在使用它的程序（会议/录音软件）后重试'
   }
-  return '无法启动录音，请检查麦克风后重试'
+  if (/Abort/i.test(name)) {
+    return '麦克风启动被系统中断（AbortError 多为瞬时）：请再点一次重试'
+  }
+  if (/NotSupported|Overconstrained/i.test(name)) {
+    return '浏览器不支持录音编码：请更新浏览器，或改用 Chrome / Edge'
+  }
+  if (/InvalidState/i.test(name)) {
+    return '录音会话状态异常：请再点一次重试'
+  }
+  /* 兜底：带上原始错误名，方便反馈定位（正常情况不该走到这里） */
+  const detail = name || String((e as Error)?.message || '').slice(0, 24)
+  return detail
+    ? `无法启动录音（${detail}）：请重试；持续失败请反馈括号里的内容`
+    : '无法启动录音，请检查麦克风后重试'
 }
 
-/** 麦克风一键诊断：环境（HTTPS）→ 设备枚举 → 实录测试，
+/** 麦克风一键诊断：环境（HTTPS）→ 设备枚举 → 取麦实测 → 录音编码实测。
+    与语音输入完全同链路（getUserMedia + MediaRecorder），
     返回带结论的多行文本（用于设置页展示） */
 export async function diagnoseMic(): Promise<string> {
   const lines: string[] = []
@@ -52,13 +72,46 @@ export async function diagnoseMic(): Promise<string> {
   try {
     const stream = await md.getUserMedia({ audio: true })
     const label = stream.getAudioTracks()[0]?.label || ''
+    lines.push(`实测取麦：成功${label ? `（${label.slice(0, 24)}）` : ''}`)
+    /* 第二阶段：MediaRecorder 真录 0.4 秒并确认出了数据。
+       只测 getUserMedia 不够——部分浏览器（iOS WebView、老 Safari）能拿到
+       麦克风但 MediaRecorder 构造/启动失败，语音输入同样无法工作 */
+    let recorderOk = true
+    try {
+      const rec = new MediaRecorder(stream)
+      const parts: Blob[] = []
+      rec.ondataavailable = (ev) => {
+        if (ev.data && ev.data.size > 0) parts.push(ev.data)
+      }
+      rec.start(100)
+      await new Promise((r) => setTimeout(r, 400))
+      await new Promise<void>((resolve) => {
+        const done = () => resolve()
+        rec.onstop = done
+        try {
+          rec.stop()
+        } catch {
+          done()
+        }
+        setTimeout(done, 800)
+      })
+      if (!parts.length) throw new Error('没录到任何数据')
+      lines.push('实测录音：支持（MediaRecorder 正常出数据）')
+    } catch (e) {
+      recorderOk = false
+      const why = String((e as Error)?.name || (e as Error)?.message || '未知')
+      lines.push(`实测录音：失败（${why}）——浏览器录音编码不可用`)
+    }
     stream.getTracks().forEach((t) => t.stop())
-    lines.push(`实测录音：成功${label ? `（${label.slice(0, 24)}）` : ''}`)
-    lines.push('结论：麦克风正常，可直接使用语音输入')
+    lines.push(
+      recorderOk
+        ? '结论：麦克风正常，可直接使用语音输入'
+        : '结论：麦克风正常，但浏览器录音编码不可用——请更新浏览器或改用 Chrome / Edge'
+    )
     return lines.join('\n')
   } catch (e) {
     const name = String((e as Error)?.name || '')
-    lines.push(`实测录音：失败（${name || '未知异常'}）`)
+    lines.push(`实测取麦：失败（${name || '未知异常'}）`)
     if (/NotAllowed|Permission|Security/i.test(name)) {
       lines.push(
         '结论：权限被拒——浏览器地址栏左侧站点设置 → 麦克风 → 允许，再重试' +
@@ -72,6 +125,8 @@ export async function diagnoseMic(): Promise<string> {
       )
     } else if (/NotReadable/i.test(name)) {
       lines.push('结论：设备被其他程序占用——关闭会议/录音/K歌等软件后重试')
+    } else if (/Abort/i.test(name)) {
+      lines.push('结论：麦克风启动被系统中断（多为瞬时）——请刷新页面再试一次')
     } else {
       lines.push('结论：未知错误，请截图这段检测结果反馈')
     }
@@ -95,15 +150,58 @@ export class VoiceRecorder {
 
   /** 申请麦克风并开始录音（失败抛 NotAllowedError 等原始异常） */
   async start(): Promise<void> {
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    const prefer = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
-    this.mime = prefer.find((t) => MediaRecorder.isTypeSupported?.(t)) || ''
+    this.stream = await this.acquireMic()
+    /* gUM 成功但音轨已断开（设备中途被拔出/被系统抢占） */
+    const track = this.stream.getAudioTracks()[0]
+    if (!track || track.readyState === 'ended') {
+      this.cleanup()
+      const err = new Error('麦克风设备已断开')
+      err.name = 'NotFoundError'
+      throw err
+    }
+    /* MediaRecorder 构造：依次尝试各编码，最后退回默认构造；
+       部分浏览器 isTypeSupported 说支持、实际构造却抛 NotSupportedError */
+    const prefer = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg', '']
+    for (const mime of prefer) {
+      try {
+        this.recorder = new MediaRecorder(this.stream, mime ? { mimeType: mime } : undefined)
+        this.mime = this.recorder.mimeType || mime
+        break
+      } catch {
+        /* 尝试下一种编码 */
+      }
+    }
+    if (!this.recorder) {
+      this.cleanup()
+      const err = new Error('当前浏览器不支持录音编码（MediaRecorder）')
+      err.name = 'NotSupportedError'
+      throw err
+    }
     this.chunks = []
-    this.recorder = new MediaRecorder(this.stream, this.mime ? { mimeType: this.mime } : undefined)
     this.recorder.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) this.chunks.push(e.data)
     }
-    this.recorder.start(250)
+    try {
+      this.recorder.start(250)
+    } catch (e) {
+      this.cleanup()
+      const name = String((e as Error)?.name || '')
+      if (!/InvalidState|NotSupported/i.test(name)) throw e
+      const err = new Error('录音启动失败：请再点一次重试')
+      err.name = name || 'InvalidStateError'
+      throw err
+    }
+  }
+
+  /** 申请麦克风；iOS/Safari 常见瞬时 AbortError，等 300ms 自动重试一次再判失败 */
+  private async acquireMic(): Promise<MediaStream> {
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch (e) {
+      if (!/Abort/i.test(String((e as Error)?.name || ''))) throw e
+      await new Promise((r) => setTimeout(r, 300))
+      return navigator.mediaDevices.getUserMedia({ audio: true })
+    }
   }
 
   get active(): boolean {
@@ -157,7 +255,13 @@ async function blobToWavBase64(blob: Blob): Promise<string> {
   if (!Ctx) throw new Error('当前浏览器不支持音频解码')
   const ctx = new Ctx()
   try {
-    const audio = await ctx.decodeAudioData(buf.slice(0))
+    let audio: AudioBuffer
+    try {
+      audio = await ctx.decodeAudioData(buf.slice(0))
+    } catch (e) {
+      const why = String((e as Error)?.name || '格式不支持')
+      throw new Error(`录音解码失败（${why}）：请换 Chrome / Edge 重试`)
+    }
     const rate = 16000
     const src = audio.getChannelData(0)
     const ratio = audio.sampleRate / rate
@@ -203,7 +307,9 @@ async function blobToWavBase64(blob: Blob): Promise<string> {
   }
 }
 
-/** 调后端 /api/asr 识别 base64 WAV */
+/** 调后端 /api/asr 识别 base64 WAV。
+    部署环境常见三类失败分别报因：后端没部署（404/返回网页）、
+    代理层未转发（如 Cloudflare，HTML/5xx）、识别服务本身出错 */
 export async function recognizeBase64(b64: string): Promise<string> {
   let res: Response
   try {
@@ -213,11 +319,25 @@ export async function recognizeBase64(b64: string): Promise<string> {
       body: JSON.stringify({ audio: b64 }),
     })
   } catch {
-    throw new Error('识别服务连接失败，请检查网络后重试')
+    throw new Error('识别服务连接失败：请检查网络后重试')
   }
-  const data = (await res.json().catch(() => null)) as { text?: string; error?: string } | null
-  if (!res.ok || !data || typeof data.text !== 'string') {
-    throw new Error(data?.error || '识别服务暂不可用，请稍后再试')
+  const raw = await res.text().catch(() => '')
+  let data: { text?: string; error?: string } | null = null
+  if (raw) {
+    try {
+      data = JSON.parse(raw) as { text?: string; error?: string }
+    } catch {
+      data = null
+    }
   }
-  return data.text.trim()
+  if (res.ok && data && typeof data.text === 'string') return data.text.trim()
+  /* 5xx：网关/代理（如 Cloudflare）或后端本身出错（502 页面也是 HTML，先判状态码） */
+  if (res.status >= 500) {
+    throw new Error(`识别服务网关错误（HTTP ${res.status}）：代理或后端暂时不可用，请稍后再试`)
+  }
+  /* 404 或 200 却返回 HTML（SPA 兜底页）：该部署根本没有 /api/asr 后端 */
+  if (res.status === 404 || (res.ok && !data)) {
+    throw new Error('识别接口不可用（404/返回网页）：当前部署没有 /api/asr 后端，纯静态托管无法语音识别')
+  }
+  throw new Error(data?.error || `识别失败（HTTP ${res.status}）：请稍后再试`)
 }

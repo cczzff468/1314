@@ -162,7 +162,8 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
     setHint(t)
     window.clearTimeout(hintTimer.current)
     window.clearTimeout(resultTimer.current)
-    hintTimer.current = window.setTimeout(() => setHint(''), 1800)
+    /* 错误类长文案给足阅读时间 */
+    hintTimer.current = window.setTimeout(() => setHint(''), t.length > 24 ? 4600 : 1800)
   }
 
   /* 测试结果类提示：展示更久（6 秒），避免结果一闪而过看不清 */
@@ -337,6 +338,7 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
       const text = await runServerSttTest()
       showResult(`测试通过（服务端识别）：${text.slice(0, 24)}${text.length > 24 ? '…' : ''}`)
     } catch (e) {
+      console.warn('[voice] 语音输入测试失败：', e)
       const msg = String((e as Error)?.name || '') + ' ' + String((e as Error)?.message || '')
       if (!/太短|没有录到/.test(msg)) {
         /* 麦克风/权限类问题：提示 + 自动跑诊断，把真实原因展示在下方 */

@@ -508,7 +508,8 @@ export default function Chat({
         showHint(`已识别：${text.slice(0, 12)}${text.length > 12 ? '…' : ''}`)
       })
       .catch((e: unknown) => {
-        showHint(String((e as Error)?.message || '识别失败，请重试').slice(0, 36))
+        console.warn('[voice] 识别失败：', e)
+        showHint(String((e as Error)?.message || '识别失败，请重试').slice(0, 60))
       })
       .finally(() => {
         setRecognizing(false)
@@ -535,7 +536,8 @@ export default function Chat({
       })
       .catch((e: unknown) => {
         recRef.current = null
-        showHint(micErrMsg(e).slice(0, 42))
+        console.warn('[voice] 录音启动失败：', e)
+        showHint(micErrMsg(e).slice(0, 60))
       })
   }
 
@@ -560,10 +562,11 @@ export default function Chat({
     saveMessages(loadMessages().filter((m) => m.friendId !== friend.id).concat(next))
   }
 
+  /* 提示时长随文案长度自适应：错误类长文案给足阅读时间 */
   const showHint = (t: string) => {
     setHint(t)
     window.clearTimeout(hintTimer.current)
-    hintTimer.current = window.setTimeout(() => setHint(''), 1600)
+    hintTimer.current = window.setTimeout(() => setHint(''), t.length > 24 ? 4600 : 1600)
   }
 
   const chatBgStyle = (() => {

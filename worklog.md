@@ -1371,3 +1371,63 @@ Stage Summary:
 - 部署后用户可自助定位麦克风问题：点「麦克风检测」即得环境/设备/
   实测/结论四行报告；NotFoundError 按设备数区分「系统关了麦克风」
   与「默认设备失效（蓝牙耳机残留）」两种根因
+
+---
+Task ID: 33
+Agent: main (Z.ai Code)
+Task: 部署环境「显示麦克风正常但无法启动录音」排查——错误信息按阶段精确化，全链路可诊断
+
+Work Log:
+- 定位根因：诊断页通过 = getUserMedia 实测成功；聊天里报
+  「无法启动录音」= micErrMsg 兜底分支 = 失败发生在 gUM 之后的
+  MediaRecorder 构造/启动（或 gUM 抛 AbortError 等未分类错误），
+  旧文案把真实原因掩盖成了「请检查麦克风」
+- 重写 src/cove/utils/asr.ts：
+  · micErrMsg 新增 AbortError（瞬时中断，重试）/NotSupported（录音
+    编码不支持）/InvalidState（会话状态异常）分支；兜底文案带原始
+    错误名「无法启动录音（xxxError）」便于反馈定位
+  · VoiceRecorder.start：gUM 抛 AbortError 等 300ms 自动重试一次
+    （iOS/Safari 常见瞬时失败）；MediaRecorder 构造按
+    opus-webm→webm→mp4→ogg→默认 依次回退，全失败才报
+    NotSupportedError；gUM 成功但音轨 ended 按 NotFound 处理；
+    recorder.start 异常按 InvalidState/NotSupported 归类
+  · diagnoseMic 升级两阶段：取麦实测 + MediaRecorder 真录 0.4s
+    确认出数据，结论区分「麦克风正常」与「麦克风正常但录音编码
+    不可用」，不再给出虚假的「可直接使用语音输入」
+  · blobToWavBase64：decodeAudioData 失败报「录音解码失败（错误名）」
+  · recognizeBase64：区分三类部署故障——5xx 网关错误（Cloudflare，
+    先判状态码避免 502 HTML 被误判）、404/200 返回 HTML（纯静态
+    托管无 /api/asr 后端）、其他 HTTP 错误
+- Chat.tsx/VoiceApiPage.tsx：错误 toast 截断放宽至 60 字、时长按
+  文案长度自适应（>24 字 4.6s）、catch 落 console.warn('[voice]…')
+  便于用户开控制台自查
+- lint 0 error；agent-browser 七场景全过（mock 注入）：
+  · 正常链路：录音→停止→识别→文字落输入框「已识别：你好语音
+    测试成功」，控制台无 voice 告警 ✓
+  · gUM AbortError：toast「麦克风启动被系统中断（AbortError
+    多为瞬时）：请再点一次重试」+ console.warn 落原始异常 ✓
+  · MediaRecorder 构造抛 NotSupportedError：toast「浏览器不支持
+    录音编码：请更新浏览器，或改用 Chrome / Edge」✓
+  · /api/asr 200+HTML（SPA 兜底）：toast「识别接口不可用（404/
+    返回网页）：当前部署没有 /api/asr 后端，纯静态托管无法语音识别」✓
+  · /api/asr 502+HTML（Cloudflare 网关）：toast「识别服务网关错误
+    （HTTP 502）：代理或后端暂时不可用」✓
+  · decodeAudioData 抛 EncodingError：toast「录音解码失败
+    （EncodingError）：请换 Chrome / Edge 重试」✓
+  · 设置页诊断：MediaRecorder 陷阱下输出「实测取麦：成功 / 实测
+    录音：失败（NotSupportedError）——浏览器录音编码不可用 /
+    结论：麦克风正常，但浏览器录音编码不可用」；全 mock 下输出
+    「实测录音：支持（MediaRecorder 正常出数据）/ 结论：麦克风
+    正常，可直接使用语音输入」✓
+- 页面零 JS 错误；dev.log 全 200
+
+Stage Summary:
+- 修改文件：src/cove/utils/asr.ts、src/cove/pages/Chat.tsx、
+  src/cove/pages/VoiceApiPage.tsx
+- 「麦克风正常但无法启动录音」不再被笼统文案掩盖：麦克风/录音
+  编码/解码/识别网络四个阶段的失败分别报因，兜底带原始错误名
+- 给部署用户的自助排查路径：设置→语音配置→麦克风检测（两阶段
+  实测出结论）；若诊断全绿但聊天仍失败，toast+控制台会给出
+  精确错误名；若 /api/asr 报 404/返回网页，说明该部署为纯静态
+  托管（无后端），语音识别本身不可用——Cloudflare 只影响这一段
+  （API 转发），不影响浏览器本地麦克风
