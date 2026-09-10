@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavBar, Modal } from '../components/common'
 import { loadApiSetting, saveApiSetting, uid } from '../store'
 import { testTtsConnection } from '../utils/apiTest'
-import { VoiceRecorder } from '../utils/asr'
+import { VoiceRecorder, diagnoseMic, micErrMsg } from '../utils/asr'
 import type { ApiSetting, VoiceConfig } from '../types'
 
 const PROVIDER_LIST = ['OpenAI', 'Minimax 国内版', 'Minimax 国际版', '本地免费 (Edge TTS)']
@@ -124,6 +124,8 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
   const [delTarget, setDelTarget] = useState<VoiceConfig | null>(null)
   const [hint, setHint] = useState('')
   const [sttTesting, setSttTesting] = useState(false)
+  const [micDiaging, setMicDiaging] = useState(false)
+  const [micDiag, setMicDiag] = useState('')
   const [testingId, setTestingId] = useState('')
   const [editTesting, setEditTesting] = useState(false)
   const [localVoices, setLocalVoices] = useState<SpeechSynthesisVoice[]>([])
@@ -311,7 +313,23 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
     }
   }
 
-  /* 测试语音输入：录音 5 秒 → 服务端识别，页面内直接测试 */
+  /* 麦克风一键诊断：环境（HTTPS）→ 设备枚举 → 实录测试，直接给出
+     可照着做的结论；测试失败时也会自动跑一遍 */
+  const runMicDiag = async () => {
+    if (micDiaging) return
+    setMicDiaging(true)
+    setMicDiag('检测中…')
+    try {
+      setMicDiag(await diagnoseMic())
+    } catch {
+      setMicDiag('检测失败：浏览器异常，请刷新页面重试')
+    } finally {
+      setMicDiaging(false)
+    }
+  }
+
+  /* 测试语音输入：录音 5 秒 → 服务端识别，页面内直接测试；
+     麦克风类失败自动附上诊断结果 */
   const testStt = async () => {
     if (sttTesting) return
     setSttTesting(true)
@@ -320,15 +338,17 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
       showResult(`测试通过（服务端识别）：${text.slice(0, 24)}${text.length > 24 ? '…' : ''}`)
     } catch (e) {
       const msg = String((e as Error)?.name || '') + ' ' + String((e as Error)?.message || '')
-      showHint(
-        /NotAllowed|Permission|denied|拒绝/i.test(msg)
-          ? '麦克风权限被拒绝：请在浏览器地址栏允许本页使用麦克风后重试'
-          : /NotFound|not found|设备/i.test(msg)
-            ? '未检测到麦克风设备：请插入麦克风或检查系统设置'
-            : /太短|没有录到/.test(msg)
-              ? '录音太短：点测试后请对麦克风说一句话'
-              : `测试失败：${String((e as Error)?.message || '未知错误').slice(0, 30)}`
-      )
+      if (!/太短|没有录到/.test(msg)) {
+        /* 麦克风/权限类问题：提示 + 自动跑诊断，把真实原因展示在下方 */
+        showHint(micErrMsg(e))
+        try {
+          setMicDiag('测试失败，已自动检测：\n' + (await diagnoseMic()))
+        } catch {
+          /* 诊断失败不影响提示 */
+        }
+        return
+      }
+      showHint('录音太短：点测试后请对麦克风说一句话')
     } finally {
       setSttTesting(false)
     }
@@ -674,6 +694,22 @@ export default function VoiceApiPage({ onBack }: { onBack: () => void }) {
               点击麦克风开始说话，再点「停止」即出文字；识别由应用服务端完成，语言自动检测；首次使用会请求麦克风权限（请点「允许」）
             </span>
           </div>
+          <div className="form-row">
+            <button
+              className={`mini-btn ${micDiaging ? 'testing' : ''}`}
+              disabled={micDiaging}
+              onClick={runMicDiag}
+            >
+              {micDiaging ? '检测中…' : '麦克风检测'}
+            </button>
+          </div>
+          {micDiag && (
+            <div className="form-row">
+              <span className="form-preview" style={{ whiteSpace: 'pre-line' }}>
+                {micDiag}
+              </span>
+            </div>
+          )}
           <div className="form-row">
             <button
               className={`mini-btn ${sttTesting ? 'testing' : ''}`}

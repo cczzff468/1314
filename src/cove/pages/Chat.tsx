@@ -8,7 +8,7 @@ import { collectWorldbook } from '../utils/worldbook'
 import { friendMemoryContext, maybeAutoSummarize } from '../utils/memory'
 import { fileToAvatar, fileToPhoto } from '../utils/image'
 import { formatMoney } from '../utils/qr'
-import { VoiceRecorder } from '../utils/asr'
+import { VoiceRecorder, micErrMsg } from '../utils/asr'
 
 interface MenuPos {
   x: number
@@ -535,12 +535,7 @@ export default function Chat({
       })
       .catch((e: unknown) => {
         recRef.current = null
-        const msg = String((e as Error)?.name || '') + ' ' + String((e as Error)?.message || '')
-        showHint(
-          /NotAllowed|Permission|denied|拒绝/i.test(msg)
-            ? '麦克风权限被拒：若在预览框架内，请用「新标签页打开」后重试'
-            : '无法启动录音，请检查麦克风后重试'
-        )
+        showHint(micErrMsg(e).slice(0, 42))
       })
   }
 

@@ -1333,3 +1333,41 @@ Stage Summary:
   src/cove/store.ts、public/ios/js/modules/info.js、
   public/ios/js/modules/settings.js；删除 public/ws-test.html
 - 用户设置无感迁移：sttEnabled 保留，旧 sttEngine/sttLang 键忽略
+
+---
+Task ID: 33
+Agent: Z.ai Code (main)
+Task: 用户部署环境点语音测试报「未检测到麦克风设备」——澄清开关
+含义并新增麦克风一键诊断
+
+Work Log:
+- 用户混淆「语音输入开关（默认开启）」与「未检测到麦克风设备」：
+  前者只管功能开关，后者是 getUserMedia 抛 NotFoundError（浏览器/
+  系统层面拿不到录音设备），两者无冲突；旧代码同样场景显示相同
+  提示，非 Task 32 删引擎引入
+- src/cove/utils/asr.ts 新增两个导出：
+  · micErrMsg(e)：麦克风错误统一分类（NotAllowed→权限提示（iframe
+    场景提示新标签页打开）/ NotFound→换默认设备+查 Windows 隐私
+    设置 / NotReadable→设备被占用 / 兜底）
+  · diagnoseMic()：一键诊断——isSecureContext（HTTPS）→
+    enumerateDevices 数输入设备 → getUserMedia 实测 → 按
+    （设备数 0 / >0）与错误类型给出可照着做的结论
+- src/cove/pages/VoiceApiPage.tsx：
+  · 新增「麦克风检测」按钮 + 多行结果区（whiteSpace: pre-line）
+  · testStt 麦克风类失败 → toast 分类提示 + 自动跑 diagnoseMic
+    展示「测试失败，已自动检测：…」；录音太短仍走原提示
+- src/cove/pages/Chat.tsx：startServerVoice 失败提示改用
+  micErrMsg（保留 42 字截断适配 toast）
+- lint 0 error；agent-browser 验证三场景：
+  · 正常：HTTPS/2 设备/实测成功/「麦克风正常」✓
+  · NotFoundError+2 设备：结论「换默认输入设备（蓝牙耳机残留）」，
+    测试失败自动诊断同文案 + toast 新分类提示 ✓
+  · NotFoundError+0 设备：结论「Windows 隐私设置允许桌面应用访问
+    麦克风」✓；浏览器零报错
+
+Stage Summary:
+- 修改文件：src/cove/utils/asr.ts、src/cove/pages/VoiceApiPage.tsx、
+  src/cove/pages/Chat.tsx
+- 部署后用户可自助定位麦克风问题：点「麦克风检测」即得环境/设备/
+  实测/结论四行报告；NotFoundError 按设备数区分「系统关了麦克风」
+  与「默认设备失效（蓝牙耳机残留）」两种根因
